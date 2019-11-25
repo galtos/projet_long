@@ -68,6 +68,15 @@ def get_interface_residue(structure_1, structure_2, distance_threshold = 8):
                 vector_interface_2[j] = 1
     return(list_interface_residue, vector_interface_1, vector_interface_2)
 
+def get_neighbor_residues(structure, residue_middle, k_threshold=9):
+    residues = [r for r in structure.get_residues()]
+    residue_distance = []
+    for i in range(len(residues)):
+        distance = residue_middle["CA"] - residues[i]["CA"]#residue_distance(residue_middle, residues[i]) #ERROR with function
+        residue_distance.append((i,distance))
+    return(sorted(residue_distance, key=itemgetter(1))[0:k_threshold])
+    
+    
 #### MAIN ####
 if __name__ == "__main__":
     path_bound = "../data/data_struct3d_bound"
@@ -100,7 +109,7 @@ if __name__ == "__main__":
             print(i)
 
     list_surface_residue_12[0][0][1]
-
     list_surface_residue[0][0][1]
-    
+    #exemple neighbor
+    get_neighbor_residues(structure_1[0], structure_1[0][0]["A"][10], 10)
 
