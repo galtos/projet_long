@@ -10,5 +10,5 @@ for file in $(ls $path_templates/*_1.pdb);do
     echo $struct_1
     echo $struct_2
     echo $struct
-    cat $struct_1 $struct_2 > $struct 
+    cat $struct_1 $struct_2 > $struct
 done
