@@ -6,6 +6,7 @@
 
 from Bio.PDB import * # set ref
 import numpy as np
+import re
 
 QIPI = {
 'H':1.147, 'R':1.346, 'K':0.784, 'A':0.841, 'V':0.994, 'I':1.084, 'L':1.144, \
@@ -131,7 +132,17 @@ def count_intersect_surface_interface_residue(list_surface_residue, list_interfa
             if list_surface_residue[i] == list_interface_residue[j]:
                 k = k+1
     print(k)
-#def get_pssm_value(path_pssm):
+def get_pssm_value(path_pssm):
+    list_ipp_value = []
+    list_rwgrmtp_value = []
+    for line in open(path_pssm):
+        line = line.rstrip()
+        line = re.sub(' +',' ',line)
+        line = line.split(' ')
+        if len(line) >= 44:
+            list_ipp_value.append(float(line[-2]))
+            list_rwgrmtp_value.append( float(line[-1]) if line[-1] != "inf" else "inf" )
+    return([list_ipp_value,list_rwgrmtp_value])
     
     
 #### MAIN ####
@@ -158,19 +169,14 @@ if __name__ == "__main__":
     
     list_relative_rsa = get_rsa_relative(path_file_rsa)
     list_relative_rsa_bind = get_rsa_relative_bind(path_file_rsa_bind)
-    print(list_relative_rsa)
-    print(list_relative_rsa_bind[0])
+
     list_surface_residue = get_surface_residue(list_relative_rsa)
     list_interface_residue = get_interface_residue(list_relative_rsa, list_relative_rsa_bind[0])
-    
-    res = [value for value in list_surface_residue if value not in list_surface_residue_12[1]]
-
-    for i in range(len(list_surface_residue)):
-        if list_surface_residue[0][0][1] != list_surface_residue_12[0][i][1]:
-            print(i)
-
-    list_surface_residue_12[0][0][1]
-    list_surface_residue[0][0][1]
+    #pssm
+    path_file_pssm = "../data/t.pssm"
+    pssm = get_pssm_value(path_file_pssm)
     #exemple neighbor
     get_neighbor_residues(structure_1[0], structure_1[0][0]["A"][10], 10)
+    
+    #pssmm
 
