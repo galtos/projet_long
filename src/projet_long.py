@@ -5,13 +5,15 @@
 # python test to download pdb file, extract prot sequence, set the resolution of the structure
 
 from Bio.PDB import * # set ref
+#import DSSP
 import numpy as np
+import aaindex
+import os
 import re
+from subprocess import call
+import sys
+import unittest
 
-QIPI = {
-'H':1.147, 'R':1.346, 'K':0.784, 'A':0.841, 'V':0.994, 'I':1.084, 'L':1.144, \
-'M':1.451, 'P':1.109, 'F':1.334, 'W':1.284, 'Y':1.368, 'G':0.823, 'C':1.172, \
-'S':0.873, 'T':0.966, 'N':0.958, 'Q':0.909, 'D':0.830, 'E':0.805}
 									
 # get pdb file names
 
@@ -91,7 +93,16 @@ def get_rsa_relative(path_file_rsa):
             relative_rsa = list[5]
             list_relative_rsa.append(float(relative_rsa))
     return(list_relative_rsa)
-
+def get_asa_value(path_file_asa):
+    list_asa_value = []
+    for line in open(path_file_asa):
+        list = line.split()
+        id = list[0]
+        if id == 'RES':
+            asa_value = list[5]
+            list_asa_value.append(float(asa_value))
+    return(list_asa_value)
+    
 def get_rsa_relative_bind(path_file_rsa):
     list_relative_rsa = [[]]
     struct_flag = 2
@@ -142,25 +153,163 @@ def get_pssm_value(path_pssm):
         if len(line) >= 44:
             list_ipp_value.append(float(line[-2]))
             list_rwgrmtp_value.append( float(line[-1]) if line[-1] != "inf" else "inf" )
-    return([list_ipp_value,list_rwgrmtp_value])
+    return((list_ipp_value,list_rwgrmtp_value))
+def get_SS(structure, path_structure):
+    list_SS = []
+    dssp = DSSP(structure, path_structure)
+    list_dssp = list(dssp)
+    print(list_dssp)
+
+def set_propka():
+    pdbs = ['1FTJ-Chain-A',
+                '1HPX',
+                '4DFR']
+
+        test_dir = os.path.dirname(__file__)
+        base_dir = os.path.dirname(test_dir)
+
+        executable = os.path.join(base_dir, "scripts", "propka31.py")
+
+        env = { "PYTHONPATH" : base_dir }
+
+        for pdb in pdbs:
+            input_filename = os.path.join(test_dir, "pdb", pdb + ".pdb")
+            output_filename = os.path.join(test_dir, pdb + ".out")
+
+            output_file = open(output_filename, "w")
+            call([sys.executable, executable, input_filename],
+                    stdout=output_file, env=env)
+            output_file.close()
+            
+def get_aaindex_features(AA):
+    aaindex.init(path='../data/aaindex')
+
+    Hydrophobicity = aaindex.get('ARGP820101')
+    Hydrophilicity = aaindex.get('HOPT810101')
+    Polarity = aaindex.get('GRAR740102')
+    Polarizability = aaindex.get('CHAM820101')
+    Propensity = aaindex.get('WERD780101')
+    Average_accessible_surface_area = aaindex.get('JANJ780101')
+    Radius_of_gyration_of_side_chain = aaindex.get('LEVM760105')
+    Side_chain_volume = aaindex.get('KRIW790103')
+    Charge = aaindex.get('KLEP840101')
+    Number_of_hydrogen_bond_donors = aaindex.get('FAUJ880109')
+    Molecular_weight = aaindex.get('FASG760101')
+    Electron_ion_interaction_potential = aaindex.get('VELV850101')
     
+    # code to get features
+    aaindex_feature = [Hydrophobicity.get(AA),\
+                       Hydrophilicity.get(AA),\
+                       Polarity.get(AA),\
+                       Polarizability.get(AA),\
+                       Propensity.get(AA),\
+                       Average_accessible_surface_area.get(AA),\
+                       Radius_of_gyration_of_side_chain.get(AA),\
+                       Side_chain_volume.get(AA),\
+                       Charge.get(AA),\
+                       Number_of_hydrogen_bond_donors.get(AA),\
+                       Molecular_weight.get(AA),\
+                       Electron_ion_interaction_potential.get(AA),\
+                       ]
+    return(aaindex_feature)
+    
+def get_pseudo_hydrophobicity(AA, Hydrophobicity, Charge):
+    if Charge.get(AA) < 0:
+        return(Hydrophobicity.get(AA)*Charge.get(AA))
+    return(Hydrophobicity.get(AA))
+    
+def get_vector(structure, path_pssm, path_aaindex, path_file_rsa, path_file_asa):
+    aaindex.init(path='../data/aaindex')
+    
+    #aaindex.init(path=path_aaindex)
+    
+    Hydrophobicity = aaindex.get('ARGP820101')
+    Hydrophilicity = aaindex.get('HOPT810101')
+    Polarity = aaindex.get('GRAR740102')
+    Polarizability = aaindex.get('CHAM820101')
+    Propensity = aaindex.get('WERD780101')
+    Average_accessible_surface_area = aaindex.get('JANJ780101')
+    Radius_of_gyration_of_side_chain = aaindex.get('LEVM760105')
+    Side_chain_volume = aaindex.get('KRIW790103')
+    Charge = aaindex.get('KLEP840101')
+    Number_of_hydrogen_bond_donors = aaindex.get('FAUJ880109')
+    Molecular_weight = aaindex.get('FASG760101')
+    Electron_ion_interaction_potential = aaindex.get('VELV850101')
+    
+    list_vector = []
+    """
+    residues = structure_1[0].get_residues()
+    for residue in residues:
+        residue.get_resname()
+        
+    ppb=PPBuilder()
+    """
+    #asa
+    list_asa_value = get_asa_value(path_file_asa)
+    #rsa
+    list_rsa_value = get_rsa_relative(path_file_rsa)
+    #pssm
+    list_ipp_value, list_rwgrmtp_value = get_pssm_value(path_pssm)
+    #QIPI
+    QIPI = {
+'H':1.147, 'R':1.346, 'K':0.784, 'A':0.841, 'V':0.994, 'I':1.084, 'L':1.144, \
+'M':1.451, 'P':1.109, 'F':1.334, 'W':1.284, 'Y':1.368, 'G':0.823, 'C':1.172, \
+'S':0.873, 'T':0.966, 'N':0.958, 'Q':0.909, 'D':0.830, 'E':0.805}
+    
+    for pp in ppb.build_peptides(structure_1[0]):
+        sequence = list(pp.get_sequence())
+    for i in range(len(sequence)):
+        list_vector.append([\
+                           #asa
+                           list_asa_value[i],\
+                           #rsa
+                           list_rsa_value[i],\
+                           #pssm
+                           list_ipp_value[i],\
+                           list_rwgrmtp_value[i],\
+                           #QIPI
+                           QIPI[sequence[i]],\
+                           #pseudo hydrophobicity
+                           get_pseudo_hydrophobicity(sequence[i],\
+                                                     Hydrophobicity,\
+                                                     Charge),\
+                           #aaindex
+                           Hydrophobicity.get(sequence[i]),\
+                           Hydrophilicity.get(sequence[i]),\
+                           Polarity.get(sequence[i]),\
+                           Polarizability.get(sequence[i]),\
+                           Propensity.get(sequence[i]),\
+                           Average_accessible_surface_area.get(sequence[i]),\
+                           Radius_of_gyration_of_side_chain.get(sequence[i]),\
+                           Side_chain_volume.get(sequence[i]),\
+                           Charge.get(sequence[i]),\
+                           Number_of_hydrogen_bond_donors.get(sequence[i]),\
+                           Molecular_weight.get(sequence[i]),\
+                           Electron_ion_interaction_potential.get(sequence[i])\
+                           ])
+                           #
+                           
+    print(len(list_vector), len(list_vector[0]), len(list_vector[1]))
     
 #### MAIN ####
 if __name__ == "__main__":
     path_bound = "../data/data_struct3d_bound"
+    path_bound = "/c/Users/GUILLA~1/Documents/Cours_USB_BI/M2BI/projet_long/data/data_struct3d_bound"
     path_list_bound_pdb_file = path_bound + "/full_structures.0.90.txt"
     
     with open(path_list_bound_pdb_file) as file:
         list_bound_pdb_file = file.readlines()
 
-    print(list_bound_pdb_file[0])
-
+    print(list_bound_pdb_file[1])
+    #for test
+    list_bound_pdb_file[0] = "1a1x1A2A\n"
     structure_1 = []
     structure_2 = []
     structure_12 = []
-    structure_1.append(get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[0][0:-1], '_1.pdb'))
-    structure_2.append(get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[0][0:-1], '_2.pdb'))
-    structure_12.append(get_structure('test_bound_12', path_bound + "/templates_bind/" + list_bound_pdb_file[0][0:-1],'.pdb'))
+    parser = PDBParser()
+    structure_1.append(parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[0][0:-1]+ '_1.pdb'))
+    structure_2.append(parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[0][0:-1]+ '_2.pdb'))
+    structure_12.append(parser.get_structure('test_bound_12', path_bound + "/templates_bind/" + list_bound_pdb_file[0][0:-1]+'.pdb'))
     ####
     # distance : test, vec1, vec2 = get_interface_residue(structure_1[0], structure_2[0])
     #list_surface_residue = get_surface_residue(structure_1[0][0], path_bound + "/templates/" + list_bound_pdb_file[0][0:-1] + '_1.pdb', 0.1)
