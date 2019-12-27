@@ -13,6 +13,7 @@ import re
 from subprocess import call
 import sys
 import unittest
+import operator
 
 									
 # get pdb file names
@@ -82,7 +83,7 @@ def get_neighbor_residues(structure, residue_middle, k_threshold=9):
     for i in range(len(residues)):
         distance = residue_middle["CA"] - residues[i]["CA"]#residue_distance(residue_middle, residues[i]) #ERROR with function
         residue_distance.append((i,distance))
-    return(sorted(residue_distance, key=itemgetter(1))[0:k_threshold])
+    return(sorted(residue_distance, key=operator.itemgetter(1))[0:k_threshold])
     
 def get_rsa_relative(path_file_rsa):
     list_relative_rsa = []
@@ -267,6 +268,7 @@ def get_vector(structure, path_pssm, path_aaindex, path_file_rsa, path_file_asa)
                            #pssm
                            list_ipp_value[i],\
                            list_rwgrmtp_value[i],\
+                           #pKa
                            #QIPI
                            QIPI[sequence[i]],\
                            #pseudo hydrophobicity
@@ -288,9 +290,30 @@ def get_vector(structure, path_pssm, path_aaindex, path_file_rsa, path_file_asa)
                            Electron_ion_interaction_potential.get(sequence[i])\
                            ])
                            #
-                           
-    print(len(list_vector), len(list_vector[0]), len(list_vector[1]))
-    
+    print(list_vector)             
+    return(list_vector)
+def get_vector_neighbors(structure, list_vector):
+    list_vector_neighbors = []
+    residues = structure.get_residues()
+    for residue in residues:
+        list_neighbors = get_neighbor_residues(structure, residue)
+        vector_neighbors = []
+        print(len(list_neighbors))
+        for neigbor in range(len(list_neighbors)):
+            vector_neighbors = vector_neighbors + list_vector[list_neighbors[0][0]]
+        list_vector_neighbors.append(vector_neighbors)
+    return(list_vector_neighbors)
+            
+def get_array_vector(structure_1, structure_2):
+    for pp in ppb.build_peptides(structure_1[0]):
+        sequence_1 = list(pp.get_sequence())
+    for pp in ppb.build_peptides(structure_2[0]):
+        sequence_2 = list(pp.get_sequence())
+    array_vector = []
+    for i in range(len(sequence_1)):
+        for j in range(len(sequence_2)):
+            array_vector.append(get_vector()+get_vector())
+            
 #### MAIN ####
 if __name__ == "__main__":
     path_bound = "../data/data_struct3d_bound"
