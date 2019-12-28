@@ -14,6 +14,7 @@ from subprocess import call
 import sys
 import unittest
 import operator
+from DeepNN_model import DeepNN_model_build
 
 									
 # get pdb file names
@@ -123,18 +124,18 @@ def get_rsa_relative_bind(path_file_rsa):
             res_number_previous = float(list[3])
     return((list_relative_rsa[0],list_relative_rsa[1]))
     
-def get_surface_residue(list_relative_rsa, threshold_rsa = 0.1):
+def get_surface_residue(list_relative_rsa, threshold_rsa = 0.25):
     list_surface_residue = []
     for i in range(len(list_relative_rsa)):
         if list_relative_rsa[i] >= threshold_rsa:
-            list_surface_residue.append(i+1)
+            list_surface_residue.append(i)
     return(list_surface_residue)
     
 def get_interface_residue(list_relative_rsa, list_relative_rsa_bind):
     list_interface_residue = []
     for i in range(len(list_relative_rsa)):
         if list_relative_rsa[i] != list_relative_rsa_bind[i]:
-            list_interface_residue.append(i+1)
+            list_interface_residue.append(i)
     return(list_interface_residue)
             
 def count_intersect_surface_interface_residue(list_surface_residue, list_interface_residue):
@@ -155,6 +156,7 @@ def get_pssm_value(path_pssm):
             list_ipp_value.append(float(line[-2]))
             list_rwgrmtp_value.append( float(line[-1]) if line[-1] != "inf" else "inf" )
     return((list_ipp_value,list_rwgrmtp_value))
+"""
 def get_SS(structure, path_structure):
     list_SS = []
     dssp = DSSP(structure, path_structure)
@@ -181,7 +183,7 @@ def set_propka():
             call([sys.executable, executable, input_filename],
                     stdout=output_file, env=env)
             output_file.close()
-            
+"""
 def get_aaindex_features(AA):
     aaindex.init(path='../data/aaindex')
 
@@ -219,7 +221,7 @@ def get_pseudo_hydrophobicity(AA, Hydrophobicity, Charge):
         return(Hydrophobicity.get(AA)*Charge.get(AA))
     return(Hydrophobicity.get(AA))
     
-def get_vector(structure, path_pssm, path_aaindex, path_file_rsa, path_file_asa):
+def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file_asa):
     aaindex.init(path='../data/aaindex')
     
     #aaindex.init(path=path_aaindex)
@@ -250,14 +252,14 @@ def get_vector(structure, path_pssm, path_aaindex, path_file_rsa, path_file_asa)
     #rsa
     list_rsa_value = get_rsa_relative(path_file_rsa)
     #pssm
-    list_ipp_value, list_rwgrmtp_value = get_pssm_value(path_pssm)
+    list_ipp_value, list_rwgrmtp_value = get_pssm_value(path_file_pssm)
     #QIPI
     QIPI = {
 'H':1.147, 'R':1.346, 'K':0.784, 'A':0.841, 'V':0.994, 'I':1.084, 'L':1.144, \
 'M':1.451, 'P':1.109, 'F':1.334, 'W':1.284, 'Y':1.368, 'G':0.823, 'C':1.172, \
 'S':0.873, 'T':0.966, 'N':0.958, 'Q':0.909, 'D':0.830, 'E':0.805}
-    
-    for pp in ppb.build_peptides(structure_1[0]):
+    ppb = PPBuilder()
+    for pp in ppb.build_peptides(structure):
         sequence = list(pp.get_sequence())
     for i in range(len(sequence)):
         list_vector.append([\
@@ -289,8 +291,7 @@ def get_vector(structure, path_pssm, path_aaindex, path_file_rsa, path_file_asa)
                            Molecular_weight.get(sequence[i]),\
                            Electron_ion_interaction_potential.get(sequence[i])\
                            ])
-                           #
-    print(list_vector)             
+                           #             
     return(list_vector)
 def get_vector_neighbors(structure, list_vector):
     list_vector_neighbors = []
@@ -300,24 +301,60 @@ def get_vector_neighbors(structure, list_vector):
         vector_neighbors = []
         print(len(list_neighbors))
         for neigbor in range(len(list_neighbors)):
-            vector_neighbors = vector_neighbors + list_vector[list_neighbors[0][0]]
+            vector_neighbors = vector_neighbors + list_vector[list_neighbors[neigbor][0]]
         list_vector_neighbors.append(vector_neighbors)
     return(list_vector_neighbors)
             
 def get_array_vector(structure_1, structure_2):
+    """
+    bind vvector structure1 and structure 2
+    """
     for pp in ppb.build_peptides(structure_1[0]):
         sequence_1 = list(pp.get_sequence())
     for pp in ppb.build_peptides(structure_2[0]):
         sequence_2 = list(pp.get_sequence())
+        
+    list_vector_1 = get_vector(structure_1[0], path_file_pssm, "", path_file_rsa, path_file_rsa)
+    list_vector_2 = get_vector(structure_2[0], path_file_pssm, "", path_file_rsa, path_file_rsa)
+    list_vector_neighbors_1 = get_vector_neighbors(structure_1[0], list_vector_1)
+    list_vector_neighbors_2 = get_vector_neighbors(structure_2[0], list_vector_2)
     array_vector = []
     for i in range(len(sequence_1)):
         for j in range(len(sequence_2)):
-            array_vector.append(get_vector()+get_vector())
-            
+            array_vector.append(list_vector_neighbors_1[i]+list_vector_neighbors_2[j])
+    return(array_vector)
+def get_X_Y(structur_1, structur_2):
+    """
+    get X and Y vector for training
+    """
+    #struct 1
+    list_relative_rsa = get_rsa_relative(path_file_rsa)
+    list_relative_rsa_bind = get_rsa_relative_bind(path_file_rsa_bind)
+
+    list_surface_residue = get_surface_residue(list_relative_rsa, threshold_rsa = 25)
+    list_interface_residue = get_interface_residue(list_relative_rsa, list_relative_rsa_bind[0])
+    
+    list_vector = get_vector(structure_1[0], path_file_pssm, "", path_file_rsa, path_file_rsa)
+    list_vector_neighbors = get_vector_neighbors(structure_1[0], list_vector)
+
+    sequence = get_sequence(structure_1[0])
+    Y = [0] * len(sequence)
+    for i in range(len(sequence)):
+        if i in list_interface_residue:
+            Y[i] = 1
+    Y = keras.utils.to_categorical(Y, num_classes=2)
+    X = np.asarray(list_vector_neighbors)
+
+
+def train_DeepNN_model():
+    model = DeepNN_model.build()
+    model.compile(loss = "binary_crossentropy",optimizer="adam", metrics=['accuracy'])
+    model.fit(X,Y,epochs=100, batch_size = 10)
+    model.evaluate(X, Y)
 #### MAIN ####
 if __name__ == "__main__":
     path_bound = "../data/data_struct3d_bound"
-    path_bound = "/c/Users/GUILLA~1/Documents/Cours_USB_BI/M2BI/projet_long/data/data_struct3d_bound"
+    #path_bound = "/c/Users/GUILLA~1/Documents/Cours_USB_BI/M2BI/projet_long/data/data_struct3d_bound"
     path_list_bound_pdb_file = path_bound + "/full_structures.0.90.txt"
     
     with open(path_list_bound_pdb_file) as file:
@@ -339,6 +376,10 @@ if __name__ == "__main__":
     path_file_rsa = path_bound + "/templates/" + list_bound_pdb_file[0][0:-1] + '_1.rsa'
     path_file_rsa_bind = path_bound + "/templates_bind/" + list_bound_pdb_file[0][0:-1] + '.rsa'
     
+    path_file_asa = path_bound + "/templates/" + list_bound_pdb_file[0][0:-1] + '_1.asa'
+    path_file_asa_bind = path_bound + "/templates_bind/" + list_bound_pdb_file[0][0:-1] + '.asa'
+
+
     list_relative_rsa = get_rsa_relative(path_file_rsa)
     list_relative_rsa_bind = get_rsa_relative_bind(path_file_rsa_bind)
 
