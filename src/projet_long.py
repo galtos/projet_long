@@ -15,6 +15,9 @@ import sys
 import unittest
 import operator
 from DeepNN_model import DeepNN_model_build
+#pssm
+from Bio import AlignIO
+
 
 									
 # get pdb file names
@@ -220,6 +223,13 @@ def get_pseudo_hydrophobicity(AA, Hydrophobicity, Charge):
     if Charge.get(AA) < 0:
         return(Hydrophobicity.get(AA)*Charge.get(AA))
     return(Hydrophobicity.get(AA))
+def get_max_psicov(path_psicov, size_seq):
+    list_max_coev = np.zeros((size_seq, size_seq))
+    for line in open(path_psicov):
+        line = line.rstrip()
+        line = line.split(' ')
+        list_max_coev[int(line[0])-1][int(line[1])-1] = float(line[4])
+    return(np.amax(list_max_coev, axis=1))
     
 def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file_asa):
     aaindex.init(path='../data/aaindex')
@@ -345,12 +355,33 @@ def get_X_Y(structur_1, structur_2):
     Y = keras.utils.to_categorical(Y, num_classes=2)
     X = np.asarray(list_vector_neighbors)
 
-
 def train_DeepNN_model():
     model = DeepNN_model.build()
     model.compile(loss = "binary_crossentropy",optimizer="adam", metrics=['accuracy'])
     model.fit(X,Y,epochs=100, batch_size = 10)
     model.evaluate(X, Y)
+    
+def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
+    parser = PDBParser()
+    for i in range(len(list_bound_pdb_file)):
+        structure_1 = parser.get_structure(list_bound_pdb_file[i][0:-1]+ '_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
+        structure_2 = parser.get_structure(list_bound_pdb_file[i][0:-1]+ '_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
+        
+        file_fasta_1 = open(path_fasta + list_bound_pdb_file[i][0:-1]+'_1.fasta', 'w')
+        file_fasta_1.write('>'+list_bound_pdb_file[i][0:-1]+ '_1'+"\n")
+        file_fasta_1.write(''.join(list(get_sequence(structure_1))))
+        file_fasta_1.close()
+        file_fasta_2 = open(path_fasta + list_bound_pdb_file[i][0:-1]+'_2.fasta', 'w')
+        file_fasta_2.write('>'+list_bound_pdb_file[i][0:-1]+ '_2'+"\n")
+        file_fasta_2.write(''.join(list(get_sequence(structure_2))))
+        file_fasta_2.close()
+def make_pssm(list_bound_pdb_file, path_bound, path_pssm = "../data/pssmm/", path_aln = "../data/example.aln"):
+    align = AlignIO.read("../data/example.a3m", "fasta-m10")
+    print(align)
+
+
+    
+
 #### MAIN ####
 if __name__ == "__main__":
     path_bound = "../data/data_struct3d_bound"
