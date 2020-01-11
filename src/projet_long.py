@@ -15,9 +15,11 @@ import sys
 import unittest
 import operator
 from DeepNN_model import DeepNN_model_build
+from keras.utils import to_categorical
 #pssm
 from Bio import AlignIO
-
+#mutual information
+#from MI import Statistics
 
 									
 # get pdb file names
@@ -56,7 +58,6 @@ def get_surface_residue(structure, path_structure, rsa_threshold, acc_array = "S
     return list_surface_residue
 """
 
-
 def residue_distance(residue_1, residue_2):
     try:
         distance = residue_1['CA'] - residue_2['CA']
@@ -85,10 +86,10 @@ def get_neighbor_residues(structure, residue_middle, k_threshold=9):
     residues = [r for r in structure.get_residues()]
     residue_distance = []
     for i in range(len(residues)):
-        distance = residue_middle["CA"] - residues[i]["CA"]#residue_distance(residue_middle, residues[i]) #ERROR with function
+        distance = residue_middle["CA"] - residues[i]["CA"]
         residue_distance.append((i,distance))
     return(sorted(residue_distance, key=operator.itemgetter(1))[0:k_threshold])
-    
+
 def get_rsa_relative(path_file_rsa):
     list_relative_rsa = []
     for line in open(path_file_rsa):
@@ -104,7 +105,7 @@ def get_asa_value(path_file_asa):
         list = line.split()
         id = list[0]
         if id == 'RES':
-            asa_value = list[5]
+            asa_value = list[4]
             list_asa_value.append(float(asa_value))
     return(list_asa_value)
     
@@ -140,7 +141,7 @@ def get_interface_residue(list_relative_rsa, list_relative_rsa_bind):
         if list_relative_rsa[i] != list_relative_rsa_bind[i]:
             list_interface_residue.append(i)
     return(list_interface_residue)
-            
+
 def count_intersect_surface_interface_residue(list_surface_residue, list_interface_residue):
     k = 0
     for i in range(len(list_surface_residue)):
@@ -159,13 +160,13 @@ def get_pssm_value(path_pssm):
             list_ipp_value.append(float(line[-2]))
             list_rwgrmtp_value.append( float(line[-1]) if line[-1] != "inf" else "inf" )
     return((list_ipp_value,list_rwgrmtp_value))
-"""
+
 def get_SS(structure, path_structure):
     list_SS = []
     dssp = DSSP(structure, path_structure)
     list_dssp = list(dssp)
     print(list_dssp)
-
+"""
 def set_propka():
     pdbs = ['1FTJ-Chain-A',
                 '1HPX',
@@ -189,7 +190,6 @@ def set_propka():
 """
 def get_aaindex_features(AA):
     aaindex.init(path='../data/aaindex')
-
     Hydrophobicity = aaindex.get('ARGP820101')
     Hydrophilicity = aaindex.get('HOPT810101')
     Polarity = aaindex.get('GRAR740102')
@@ -202,8 +202,7 @@ def get_aaindex_features(AA):
     Number_of_hydrogen_bond_donors = aaindex.get('FAUJ880109')
     Molecular_weight = aaindex.get('FASG760101')
     Electron_ion_interaction_potential = aaindex.get('VELV850101')
-    
-    # code to get features
+#code to get features
     aaindex_feature = [Hydrophobicity.get(AA),\
                        Hydrophilicity.get(AA),\
                        Polarity.get(AA),\
@@ -215,14 +214,14 @@ def get_aaindex_features(AA):
                        Charge.get(AA),\
                        Number_of_hydrogen_bond_donors.get(AA),\
                        Molecular_weight.get(AA),\
-                       Electron_ion_interaction_potential.get(AA),\
-                       ]
+                       Electron_ion_interaction_potential.get(AA)]
     return(aaindex_feature)
     
 def get_pseudo_hydrophobicity(AA, Hydrophobicity, Charge):
     if Charge.get(AA) < 0:
         return(Hydrophobicity.get(AA)*Charge.get(AA))
     return(Hydrophobicity.get(AA))
+
 def get_max_psicov(path_psicov, size_seq):
     list_max_coev = np.zeros((size_seq, size_seq))
     for line in open(path_psicov):
@@ -230,12 +229,10 @@ def get_max_psicov(path_psicov, size_seq):
         line = line.split(' ')
         list_max_coev[int(line[0])-1][int(line[1])-1] = float(line[4])
     return(np.amax(list_max_coev, axis=1))
-    
+
 def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file_asa):
-    aaindex.init(path='../data/aaindex')
-    
-    #aaindex.init(path=path_aaindex)
-    
+    aaindex.init(path_aaindex)
+
     Hydrophobicity = aaindex.get('ARGP820101')
     Hydrophilicity = aaindex.get('HOPT810101')
     Polarity = aaindex.get('GRAR740102')
@@ -262,6 +259,7 @@ def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file
     #rsa
     list_rsa_value = get_rsa_relative(path_file_rsa)
     #pssm
+
     list_ipp_value, list_rwgrmtp_value = get_pssm_value(path_file_pssm)
     #QIPI
     QIPI = {
@@ -280,7 +278,6 @@ def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file
                            #pssm
                            list_ipp_value[i],\
                            list_rwgrmtp_value[i],\
-                           #pKa
                            #QIPI
                            QIPI[sequence[i]],\
                            #pseudo hydrophobicity
@@ -309,15 +306,14 @@ def get_vector_neighbors(structure, list_vector):
     for residue in residues:
         list_neighbors = get_neighbor_residues(structure, residue)
         vector_neighbors = []
-        print(len(list_neighbors))
         for neigbor in range(len(list_neighbors)):
             vector_neighbors = vector_neighbors + list_vector[list_neighbors[neigbor][0]]
         list_vector_neighbors.append(vector_neighbors)
     return(list_vector_neighbors)
-            
+
 def get_array_vector(structure_1, structure_2):
     """
-    bind vvector structure1 and structure 2
+    bind vector structure1 and structure 2
     """
     for pp in ppb.build_peptides(structure_1[0]):
         sequence_1 = list(pp.get_sequence())
@@ -333,33 +329,88 @@ def get_array_vector(structure_1, structure_2):
         for j in range(len(sequence_2)):
             array_vector.append(list_vector_neighbors_1[i]+list_vector_neighbors_2[j])
     return(array_vector)
-def get_X_Y(structur_1, structur_2):
+
+def get_X_Y(path_bound,\
+            path_list_bound_pdb_file,\
+            path_file_rsa,\
+            path_file_rsa_bind,\
+            path_file_asa,\
+            path_file_asa_bind,\
+            path_file_pssm,\
+            path_aaindex):
     """
     get X and Y vector for training
     """
-    #struct 1
-    list_relative_rsa = get_rsa_relative(path_file_rsa)
-    list_relative_rsa_bind = get_rsa_relative_bind(path_file_rsa_bind)
+    with open(path_list_bound_pdb_file) as file:
+        list_bound_pdb_file = file.readlines()
+    ## get structures
+    parser = PDBParser()
+    Y = []
+    X = []
+    XY = []
+    for i in range(10):
+        structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
+        structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
+        structure_12 = parser.get_structure('test_bound_12', path_bound + "/templates_bind/" + list_bound_pdb_file[i][0:-1]+'.pdb')
+        
+        residues_1 = [r for r in structure_1.get_residues()]
+        residues_2 = [r for r in structure_1.get_residues()]
+        if len(residues_1) == len(get_sequence(structure_1)) and len(residues_2) == len(get_sequence(structure_2)):
+            
+            list_value_rsa_1 = get_rsa_relative(path_file_rsa + list_bound_pdb_file[i][0:-1]+ '_1.rsa')
+            list_value_rsa_2 = get_rsa_relative(path_file_rsa + list_bound_pdb_file[i][0:-1]+ '_2.rsa')
+            
+            list_relative_rsa_bind_1, list_relative_rsa_bind_2 = get_rsa_relative_bind(path_file_rsa_bind + list_bound_pdb_file[i][0:-1]+ '.rsa')
+            
+            
+            list_surface_residue_1 = get_surface_residue(list_value_rsa_1, threshold_rsa = 25)
+            list_surface_residue_2 = get_surface_residue(list_value_rsa_2, threshold_rsa = 25)
+            
+            list_interface_residue_1 = get_interface_residue(list_value_rsa_1, list_relative_rsa_bind_1)
+            list_interface_residue_2 = get_interface_residue(list_value_rsa_2, list_relative_rsa_bind_2)
 
-    list_surface_residue = get_surface_residue(list_relative_rsa, threshold_rsa = 25)
-    list_interface_residue = get_interface_residue(list_relative_rsa, list_relative_rsa_bind[0])
-    
-    list_vector = get_vector(structure_1[0], path_file_pssm, "", path_file_rsa, path_file_rsa)
-    list_vector_neighbors = get_vector_neighbors(structure_1[0], list_vector)
+            list_vector_1 = get_vector(structure_1,\
+                                       path_file_pssm + list_bound_pdb_file[i][0:-1] + '_1.fasta.pssm',\
+                                       path_aaindex,\
+                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_1.rsa',\
+                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_1.rsa')
+            list_vector_2 = get_vector(structure_2,\
+                                       path_file_pssm + list_bound_pdb_file[i][0:-1] + '_2.fasta.pssm',\
+                                       path_aaindex,\
+                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_2.rsa',\
+                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_2.rsa')
+            list_vector_neighbors_1 = get_vector_neighbors(structure_1, list_vector_1)
+            list_vector_neighbors_2 = get_vector_neighbors(structure_2, list_vector_2)
 
-    sequence = get_sequence(structure_1[0])
-    Y = [0] * len(sequence)
-    for i in range(len(sequence)):
-        if i in list_interface_residue:
-            Y[i] = 1
-    Y = keras.utils.to_categorical(Y, num_classes=2)
-    X = np.asarray(list_vector_neighbors)
+            list_vector_neighbors_1_surface = []
+            list_vector_neighbors_2_surface = []
+            
+            for i in list_surface_residue_1:
+                list_vector_neighbors_1_surface.append(list_vector_neighbors_1[i])
+                if i in list_interface_residue_1:
+                    Y.append(1)
+                else:
+                    Y.append(0)
 
-def train_DeepNN_model():
-    model = DeepNN_model.build()
+            for i in list_surface_residue_2:
+                list_vector_neighbors_2_surface.append(list_vector_neighbors_2[i])
+                if i in list_interface_residue_2:
+                    Y.append(1)
+                else:
+                    Y.append(0)
+            X = X + list_vector_neighbors_1_surface + list_vector_neighbors_2_surface
+            XY.append([len(X),len(Y)])
+        else:
+            print("BAD number of residues do not correspond dont know why")
+    Y = to_categorical(Y, num_classes=2)
+    X = np.asarray(X)
+    return(X,Y)
+
+def train_DeepNN_model(X, Y):
+    model = DeepNN_model_build.build()
     model.compile(loss = "binary_crossentropy",optimizer="adam", metrics=['accuracy'])
-    model.fit(X,Y,epochs=100, batch_size = 10)
-    model.evaluate(X, Y)
+    model.fit(X,Y,epochs=1000, batch_size = 50)
+    print(model.evaluate(X, Y))
     
 def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
     parser = PDBParser()
@@ -379,48 +430,41 @@ def make_pssm(list_bound_pdb_file, path_bound, path_pssm = "../data/pssmm/", pat
     align = AlignIO.read("../data/example.a3m", "fasta-m10")
     print(align)
 
-
-    
-
 #### MAIN ####
 if __name__ == "__main__":
+
+    #PATHS
     path_bound = "../data/data_struct3d_bound"
-    #path_bound = "/c/Users/GUILLA~1/Documents/Cours_USB_BI/M2BI/projet_long/data/data_struct3d_bound"
     path_list_bound_pdb_file = path_bound + "/full_structures.0.90.txt"
-    
+
+    #get file names
     with open(path_list_bound_pdb_file) as file:
         list_bound_pdb_file = file.readlines()
-
-    print(list_bound_pdb_file[1])
-    #for test
-    list_bound_pdb_file[0] = "1a1x1A2A\n"
-    structure_1 = []
-    structure_2 = []
-    structure_12 = []
-    parser = PDBParser()
-    structure_1.append(parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[0][0:-1]+ '_1.pdb'))
-    structure_2.append(parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[0][0:-1]+ '_2.pdb'))
-    structure_12.append(parser.get_structure('test_bound_12', path_bound + "/templates_bind/" + list_bound_pdb_file[0][0:-1]+'.pdb'))
-    ####
-    # distance : test, vec1, vec2 = get_interface_residue(structure_1[0], structure_2[0])
-    #list_surface_residue = get_surface_residue(structure_1[0][0], path_bound + "/templates/" + list_bound_pdb_file[0][0:-1] + '_1.pdb', 0.1)
-    path_file_rsa = path_bound + "/templates/" + list_bound_pdb_file[0][0:-1] + '_1.rsa'
-    path_file_rsa_bind = path_bound + "/templates_bind/" + list_bound_pdb_file[0][0:-1] + '.rsa'
+    #RSA
+    path_file_rsa = path_bound + "/templates/"
+    path_file_rsa_bind = path_bound + "/templates_bind/"
+    #ASA
+    path_file_asa = path_bound + "/templates/"
+    path_file_asa_bind = path_bound + "/templates_bind/"
+    #PSSM
+    path_file_pssm = "../data/pssm/"
+    #aaindex
+    path_aaindex='../data/aaindex'
     
-    path_file_asa = path_bound + "/templates/" + list_bound_pdb_file[0][0:-1] + '_1.asa'
-    path_file_asa_bind = path_bound + "/templates_bind/" + list_bound_pdb_file[0][0:-1] + '.asa'
+    X, Y = get_X_Y(path_bound,\
+                   path_list_bound_pdb_file,\
+                   path_file_rsa,\
+                   path_file_rsa_bind,\
+                   path_file_asa,\
+                   path_file_asa_bind,\
+                   path_file_pssm,\
+                   path_aaindex)
+    train_DeepNN_model(X, Y)
 
 
-    list_relative_rsa = get_rsa_relative(path_file_rsa)
-    list_relative_rsa_bind = get_rsa_relative_bind(path_file_rsa_bind)
 
-    list_surface_residue = get_surface_residue(list_relative_rsa)
-    list_interface_residue = get_interface_residue(list_relative_rsa, list_relative_rsa_bind[0])
-    #pssm
-    path_file_pssm = "../data/t.pssm"
-    pssm = get_pssm_value(path_file_pssm)
-    #exemple neighbor
-    get_neighbor_residues(structure_1[0], structure_1[0][0]["A"][10], 10)
-    
-    #pssmm
+
+
+
+
 

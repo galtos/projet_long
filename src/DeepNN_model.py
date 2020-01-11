@@ -21,12 +21,9 @@ from sklearn.preprocessing import LabelEncoder
 class DeepNN_model_build:
     def build():
         model = Sequential()
-        
-        model.add(Dense(162, input_dim=162, activation ="relu"))
+        model.add(Dense(162, input_dim = 162, activation = "relu"))
         model.add(BatchNormalization())
-        model.add(Dense(81,activation ="relu"))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.5))
+        model.add(Dropout(0.3))
         model.add(Dense(20,activation ="relu"))
         model.add(Dense(2, activation="relu"))
         
