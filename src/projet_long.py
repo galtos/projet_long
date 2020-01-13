@@ -23,6 +23,7 @@ from Bio import AlignIO
 #numpy to npy
 from numpy import asarray
 from numpy import save
+from numpy import load
 #Voxelization
 from moleculekit.molecule import Molecule
 from moleculekit.tools.voxeldescriptors import getVoxelDescriptors, viewVoxelFeatures
@@ -31,6 +32,12 @@ from moleculekit.smallmol.smallmol import SmallMol
 from moleculekit.home import home
 import os
 #
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+#
+from sklearn.utils import class_weight
+
 									
 # get pdb file names
 
@@ -370,9 +377,10 @@ def get_voxel_data(path_bound,\
             prot_2 = prepareProteinForAtomtyping(prot_2)
             #prot.view(guessBonds=False)
 
-            for i in range(10):#len(residue)
+            for i in range(len(residues_1)):#len(residue)
                 print(list(residues_1[i]["CA"].get_vector()))
                 prot_vox, prot_centers, prot_N = getVoxelDescriptors(prot_1, boxsize = boxsize, center = list(residues_1[i]["CA"].get_vector()), validitychecks=False)
+
                 list_prot_vox.append(prot_vox)
                 
             for i in range(10):#len(residue)
@@ -389,6 +397,7 @@ def get_voxel_data(path_bound,\
             print(len(list_prot_vox[0]))
         else:
             print("BAD number of residues do not correspond dont know why")
+    
     return(list_prot_vox)
        
 def get_X_Y(path_bound,\
@@ -409,8 +418,9 @@ def get_X_Y(path_bound,\
     Y = []
     X = []
     XY = []
-    for i in range(10):
     
+    for i in range(10):
+        s=0
         structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
         structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
         structure_12 = parser.get_structure('test_bound_12', path_bound + "/templates_bind/" + list_bound_pdb_file[i][0:-1]+'.pdb')
@@ -452,32 +462,60 @@ def get_X_Y(path_bound,\
             list_vector_neighbors_1_surface = []
             list_vector_neighbors_2_surface = []
             
-            for i in list_surface_residue_1:
+            X_voxel = data = load('../data/voxel_data/voxel_data.npy')
+            print(len(X_voxel))
+            
+            
+            
+            for i in range(len(residues_1)):
                 list_vector_neighbors_1_surface.append(list_vector_neighbors_1[i])
                 if i in list_interface_residue_1:
                     Y.append(1)
                 else:
                     Y.append(0)
 
-            for i in list_surface_residue_2:
+            for i in range(len(residues_1)):
                 list_vector_neighbors_2_surface.append(list_vector_neighbors_2[i])
                 if i in list_interface_residue_2:
                     Y.append(1)
                 else:
                     Y.append(0)
             X = X + list_vector_neighbors_1_surface + list_vector_neighbors_2_surface
-            XY.append([len(X),len(Y)])
+
         else:
-            print("BAD number of residues do not correspond dont know why")
+            print("BAD number of residues, does not correspond dont know why")
+    X_voxel = data = load('../data/voxel_data/voxel_data.npy')
     Y = to_categorical(Y, num_classes=2)
     X = np.asarray(X)
-    return(X,Y)
+    return([X[:len(X_voxel)], X_voxel],Y[:len(X_voxel)])
 
 def train_DeepNN_model(X, Y):
     model = DeepNN_model_build.build()
     model.compile(loss = "binary_crossentropy",optimizer="adam", metrics=['accuracy'])
-    model.fit(X,Y,epochs=20, batch_size = 50)
-    print(model.evaluate(X, Y))
+    X_train = [X[0][:int(len(X[0])*2/3)], X[1][:int(len(X[0])*2/3)]]
+    X_test = [X[0][int(len(X[0])*2/3):], X[1][int(len(X[0])*2/3):]]
+    Y_train = Y[:int(len(Y)*2/3)]
+    Y_test = Y[int(len(Y)*2/3):]
+    """
+    class_weights = class_weight.compute_class_weight('balanced',
+                                                 np.unique(Y_train),
+                                                 Y_train)
+                                                 """
+    model.fit(X_train, Y_train,epochs=20, batch_size = 50)
+    #wrtie file
+    myfile = open("stats_DNN", 'w')
+    myfile.write("accuracy_train\n")
+    myfile.write(str(model.evaluate(X_train, Y_train)))
+    myfile.write("\naccuracy_test\n")
+    myfile.write(str(model.evaluate(X_test, Y_test)))
+    myfile.close()
+    #
+    model.save_weights(filepath='final_model.h5')
+    print(len(X_train))
+    print(len(X_test))
+    print(len(X_train))
+    print(len(Y_train))
+    print(len(Y_test))
     
 def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
     parser = PDBParser()
@@ -493,9 +531,7 @@ def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
         file_fasta_2.write('>'+list_bound_pdb_file[i][0:-1]+ '_2'+"\n")
         file_fasta_2.write(''.join(list(get_sequence(structure_2))))
         file_fasta_2.close()
-def make_pssm(list_bound_pdb_file, path_bound, path_pssm = "../data/pssmm/", path_aln = "../data/example.aln"):
-    align = AlignIO.read("../data/example.a3m", "fasta-m10")
-    print(align)
+
 def make_voxel_npy_data(list_prot_vox):
     data = asarray(list_prot_vox)
     save('../data/voxel_data/voxel_data.npy', data)
@@ -522,9 +558,10 @@ if __name__ == "__main__":
     path_aaindex='../data/aaindex'
     
     #create voxel data
+
     list_prot_vox = get_voxel_data(path_bound, list_bound_pdb_file)
     make_voxel_npy_data(list_prot_vox)
-    quit()
+
     #
     
     X, Y = get_X_Y(path_bound,\
@@ -535,11 +572,23 @@ if __name__ == "__main__":
                    path_file_asa_bind,\
                    path_file_pssm,\
                    path_aaindex)
+    #wrtie file
+    myfile = open("stats", 'w')
+    myfile.write("total\n")
+    myfile.write(str(len(Y)))
+    myfile.write("\n_Y_1\n")
+    myfile.write(str(np.count_nonzero(Y)))
+    myfile.close()
+    #
+    print(X[1].shape[2], len(X[1]))
+    nchannels = X[1].shape[2]
+    X[1] = X[1].transpose().reshape([len(X[1]), nchannels, 10, 10, 10])
+    X[1] = np.asarray(X[1])
+
+    print(len(X[0]),len(X[1]),len(Y))
+    print(X[1][0])
+    
     train_DeepNN_model(X, Y)
-
-
-
-
 
 
 
