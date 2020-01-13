@@ -5,7 +5,7 @@
 # python test to download pdb file, extract prot sequence, set the resolution of the structure
 
 from Bio.PDB import * # set ref
-#import DSSP
+from Bio.PDB.DSSP import DSSP
 import numpy as np
 import aaindex
 import os
@@ -20,7 +20,17 @@ from keras.utils import to_categorical
 from Bio import AlignIO
 #mutual information
 #from MI import Statistics
-
+#numpy to npy
+from numpy import asarray
+from numpy import save
+#Voxelization
+from moleculekit.molecule import Molecule
+from moleculekit.tools.voxeldescriptors import getVoxelDescriptors, viewVoxelFeatures
+from moleculekit.tools.atomtyper import prepareProteinForAtomtyping
+from moleculekit.smallmol.smallmol import SmallMol
+from moleculekit.home import home
+import os
+#
 									
 # get pdb file names
 
@@ -163,9 +173,19 @@ def get_pssm_value(path_pssm):
 
 def get_SS(structure, path_structure):
     list_SS = []
-    dssp = DSSP(structure, path_structure)
+    dssp = DSSP(structure[0], path_structure)
     list_dssp = list(dssp)
-    print(list_dssp)
+    list_dssp_features = []
+
+    for i in range(len(list_dssp)):
+        value_dssp = list(list_dssp[i])
+        if value_dssp[2] == "G" or value_dssp[2] == "H" or value_dssp[2] == "I":
+            list_dssp_features.append([1,0,0])
+        elif value_dssp[2] or value_dssp[2] == "B" or value_dssp[2] =="E":
+            list_dssp_features.append([0,1,0])
+        elif value_dssp[2] or value_dssp[2] == "T" or value_dssp[2] =="S" or value_dssp[2] =="-":
+            list_dssp_features.append([0,1,0])
+    return(list_dssp_features)
 """
 def set_propka():
     pdbs = ['1FTJ-Chain-A',
@@ -230,7 +250,7 @@ def get_max_psicov(path_psicov, size_seq):
         list_max_coev[int(line[0])-1][int(line[1])-1] = float(line[4])
     return(np.amax(list_max_coev, axis=1))
 
-def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file_asa):
+def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file_asa, list_dssp_features):
     aaindex.init(path_aaindex)
 
     Hydrophobicity = aaindex.get('ARGP820101')
@@ -297,7 +317,7 @@ def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file
                            Number_of_hydrogen_bond_donors.get(sequence[i]),\
                            Molecular_weight.get(sequence[i]),\
                            Electron_ion_interaction_potential.get(sequence[i])\
-                           ])
+                           ] + list_dssp_features[i])
                            #             
     return(list_vector)
 def get_vector_neighbors(structure, list_vector):
@@ -329,7 +349,48 @@ def get_array_vector(structure_1, structure_2):
         for j in range(len(sequence_2)):
             array_vector.append(list_vector_neighbors_1[i]+list_vector_neighbors_2[j])
     return(array_vector)
+def get_voxel_data(path_bound,\
+                   list_bound_pdb_file):
+    tut_data = home(dataDir='/home/sdv/m2bi/gollitrault/M2BI/projet_long/src')
+    boxsize = [10,10,10]
+    list_prot_vox = []
+    parser = PDBParser()
+    for i in range(1):
 
+        structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
+        structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
+        
+        residues_1 = [r for r in structure_1.get_residues()]
+        residues_2 = [r for r in structure_1.get_residues()]
+        if len(residues_1) == len(get_sequence(structure_1)) and len(residues_2) == len(get_sequence(structure_2)):
+            #vox
+            prot_1 = Molecule(os.path.join(tut_data, path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb'))
+            prot_2 = Molecule(os.path.join(tut_data, path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb'))
+            prot_1 = prepareProteinForAtomtyping(prot_1)
+            prot_2 = prepareProteinForAtomtyping(prot_2)
+            #prot.view(guessBonds=False)
+
+            for i in range(10):#len(residue)
+                print(list(residues_1[i]["CA"].get_vector()))
+                prot_vox, prot_centers, prot_N = getVoxelDescriptors(prot_1, boxsize = boxsize, center = list(residues_1[i]["CA"].get_vector()), validitychecks=False)
+                list_prot_vox.append(prot_vox)
+                
+            for i in range(10):#len(residue)
+                print(list(residues_2[i]["CA"].get_vector()))
+                prot_vox, prot_centers, prot_N = getVoxelDescriptors(prot_2, boxsize = boxsize, center = list(residues_2[i]["CA"].get_vector()), validitychecks=False)
+                list_prot_vox.append(prot_vox)
+                
+                
+            print(prot_vox)
+            print(len(prot_vox))
+            print(prot_centers)
+            print(prot_N)
+            print(len(list_prot_vox), len(get_sequence(structure_1)))
+            print(len(list_prot_vox[0]))
+        else:
+            print("BAD number of residues do not correspond dont know why")
+    return(list_prot_vox)
+       
 def get_X_Y(path_bound,\
             path_list_bound_pdb_file,\
             path_file_rsa,\
@@ -349,6 +410,7 @@ def get_X_Y(path_bound,\
     X = []
     XY = []
     for i in range(10):
+    
         structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
         structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
         structure_12 = parser.get_structure('test_bound_12', path_bound + "/templates_bind/" + list_bound_pdb_file[i][0:-1]+'.pdb')
@@ -362,6 +424,8 @@ def get_X_Y(path_bound,\
             
             list_relative_rsa_bind_1, list_relative_rsa_bind_2 = get_rsa_relative_bind(path_file_rsa_bind + list_bound_pdb_file[i][0:-1]+ '.rsa')
             
+            list_dssp_features_1 = get_SS(structure_1, path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
+            list_dssp_features_2 = get_SS(structure_2, path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
             
             list_surface_residue_1 = get_surface_residue(list_value_rsa_1, threshold_rsa = 25)
             list_surface_residue_2 = get_surface_residue(list_value_rsa_2, threshold_rsa = 25)
@@ -373,12 +437,15 @@ def get_X_Y(path_bound,\
                                        path_file_pssm + list_bound_pdb_file[i][0:-1] + '_1.fasta.pssm',\
                                        path_aaindex,\
                                        path_file_rsa + list_bound_pdb_file[i][0:-1] + '_1.rsa',\
-                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_1.rsa')
+                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_1.rsa',\
+                                       list_dssp_features_1)
             list_vector_2 = get_vector(structure_2,\
                                        path_file_pssm + list_bound_pdb_file[i][0:-1] + '_2.fasta.pssm',\
                                        path_aaindex,\
                                        path_file_rsa + list_bound_pdb_file[i][0:-1] + '_2.rsa',\
-                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_2.rsa')
+                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_2.rsa',\
+                                       list_dssp_features_2)
+
             list_vector_neighbors_1 = get_vector_neighbors(structure_1, list_vector_1)
             list_vector_neighbors_2 = get_vector_neighbors(structure_2, list_vector_2)
 
@@ -409,7 +476,7 @@ def get_X_Y(path_bound,\
 def train_DeepNN_model(X, Y):
     model = DeepNN_model_build.build()
     model.compile(loss = "binary_crossentropy",optimizer="adam", metrics=['accuracy'])
-    model.fit(X,Y,epochs=1000, batch_size = 50)
+    model.fit(X,Y,epochs=20, batch_size = 50)
     print(model.evaluate(X, Y))
     
 def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
@@ -429,7 +496,10 @@ def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
 def make_pssm(list_bound_pdb_file, path_bound, path_pssm = "../data/pssmm/", path_aln = "../data/example.aln"):
     align = AlignIO.read("../data/example.a3m", "fasta-m10")
     print(align)
-
+def make_voxel_npy_data(list_prot_vox):
+    data = asarray(list_prot_vox)
+    save('../data/voxel_data/voxel_data.npy', data)
+    
 #### MAIN ####
 if __name__ == "__main__":
 
@@ -450,6 +520,12 @@ if __name__ == "__main__":
     path_file_pssm = "../data/pssm/"
     #aaindex
     path_aaindex='../data/aaindex'
+    
+    #create voxel data
+    list_prot_vox = get_voxel_data(path_bound, list_bound_pdb_file)
+    make_voxel_npy_data(list_prot_vox)
+    quit()
+    #
     
     X, Y = get_X_Y(path_bound,\
                    path_list_bound_pdb_file,\
