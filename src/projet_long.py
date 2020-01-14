@@ -16,6 +16,10 @@ import unittest
 import operator
 from DeepNN_model import DeepNN_model_build
 from keras.utils import to_categorical
+from keras.utils import  np_utils
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import roc_curve
+from sklearn.metrics import auc
 #pssm
 from Bio import AlignIO
 #mutual information
@@ -24,6 +28,8 @@ from Bio import AlignIO
 from numpy import asarray
 from numpy import save
 from numpy import load
+#pyplot
+import matplotlib.pyplot as plt
 #Voxelization
 from moleculekit.molecule import Molecule
 from moleculekit.tools.voxeldescriptors import getVoxelDescriptors, viewVoxelFeatures
@@ -362,7 +368,7 @@ def get_voxel_data(path_bound,\
     boxsize = [10,10,10]
     list_prot_vox = []
     parser = PDBParser()
-    for i in range(1):
+    for i in range(10):
 
         structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
         structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
@@ -418,8 +424,9 @@ def get_X_Y(path_bound,\
     Y = []
     X = []
     XY = []
-    
-    for i in range(10):
+    index_voxel_add = 0
+    list_index_voxel_add = []
+    for i in range(1):
         s=0
         structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
         structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
@@ -436,10 +443,10 @@ def get_X_Y(path_bound,\
             
             list_dssp_features_1 = get_SS(structure_1, path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
             list_dssp_features_2 = get_SS(structure_2, path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
-            
-            list_surface_residue_1 = get_surface_residue(list_value_rsa_1, threshold_rsa = 25)
-            list_surface_residue_2 = get_surface_residue(list_value_rsa_2, threshold_rsa = 25)
-            
+
+            list_surface_residue_1 = get_surface_residue(list_value_rsa_1, threshold_rsa = 30)
+            list_surface_residue_2 = get_surface_residue(list_value_rsa_2, threshold_rsa = 30)
+
             list_interface_residue_1 = get_interface_residue(list_value_rsa_1, list_relative_rsa_bind_1)
             list_interface_residue_2 = get_interface_residue(list_value_rsa_2, list_relative_rsa_bind_2)
 
@@ -468,27 +475,83 @@ def get_X_Y(path_bound,\
             
             
             for i in range(len(residues_1)):
-                list_vector_neighbors_1_surface.append(list_vector_neighbors_1[i])
                 if i in list_interface_residue_1:
+                    list_vector_neighbors_1_surface.append(list_vector_neighbors_1[i])
                     Y.append(1)
+                    list_index_voxel_add.append(index_voxel_add)
+                    index_voxel_add += 1
                 else:
-                    Y.append(0)
+                    if i in list_surface_residue_1:
+                        list_vector_neighbors_1_surface.append(list_vector_neighbors_1[i])
+                        Y.append(0)
+                        list_index_voxel_add.append(index_voxel_add)
+                        index_voxel_add += 1
 
-            for i in range(len(residues_1)):
-                list_vector_neighbors_2_surface.append(list_vector_neighbors_2[i])
+
+            for i in range(len(residues_2)):
                 if i in list_interface_residue_2:
+                    list_vector_neighbors_2_surface.append(list_vector_neighbors_2[i])
                     Y.append(1)
+                    list_index_voxel_add.append(index_voxel_add)
+                    index_voxel_add += 1
                 else:
-                    Y.append(0)
+                    if i in list_surface_residue_2:
+                        list_vector_neighbors_2_surface.append(list_vector_neighbors_2[i])
+                        Y.append(0)
+                        list_index_voxel_add.append(index_voxel_add)
+                        index_voxel_add += 1
             X = X + list_vector_neighbors_1_surface + list_vector_neighbors_2_surface
 
         else:
             print("BAD number of residues, does not correspond dont know why")
-    X_voxel = data = load('../data/voxel_data/voxel_data.npy')
+    X_voxel = load('../data/voxel_data/voxel_data.npy')
+    X_voxel_final = []
+    for i in list_index_voxel_add:
+        X_voxel_final.append(X_voxel[i])
     Y = to_categorical(Y, num_classes=2)
     X = np.asarray(X)
-    return([X[:len(X_voxel)], X_voxel],Y[:len(X_voxel)])
+    
+    X_voxel_final = np.asarray(X_voxel_final)
+    return([X[:len(X_voxel_final)], X_voxel_final],Y[:len(X_voxel_final)])
 
+def evaluate_model(X_test, Y_test, model, seuil):
+    Y_proba = model.predict(X_test)
+    Y_pred = []
+    Y_test_true = []
+    threshold = 0.5
+    for i in range(len(Y_test)):
+        Y_test_true.append(Y_test[i][1])
+        if Y_proba[i][1] > threshold:
+            Y_pred.append(1)
+        else:
+            Y_pred.append(0)
+    #EVALUATION
+    print(Y_test_true)
+    print(Y_pred)
+    confusion_m = confusion_matrix(Y_test_true, Y_pred)
+    TN, FP, FN, TP = confusion_matrix(Y_test_true, Y_pred).ravel()
+
+    # Sensitivity, hit rate, recall, or true positive rate
+    TPR = TP/(TP+FN)
+    # Specificity or true negative rate
+    TNR = TN/(TN+FP) 
+    # Precision or positive predictive value
+    PPV = TP/(TP+FP)
+    # Negative predictive value
+    NPV = TN/(TN+FN)
+    # Fall out or false positive rate
+    FPR = FP/(FP+TN)
+    # False negative rate
+    FNR = FN/(TP+FN)
+    # False discovery rate
+    FDR = FP/(TP+FP)
+
+    # Overall accuracy
+    ACC = (TP+TN)/(TP+FP+FN+TN)
+    print(ACC)
+    quit()
+
+    
 def train_DeepNN_model(X, Y):
     model = DeepNN_model_build.build()
     model.compile(loss = "binary_crossentropy",optimizer="adam", metrics=['accuracy'])
@@ -502,6 +565,29 @@ def train_DeepNN_model(X, Y):
                                                  Y_train)
                                                  """
     model.fit(X_train, Y_train,epochs=20, batch_size = 50)
+    
+    Y_proba = model.predict(X_test)
+    Y_pred = []
+    Y_test_true = []
+    for i in range(len(Y_test)):
+        Y_test_true.append(Y_test[i][1])
+        Y_pred.append(Y_proba[i][1])
+
+    Y_proba = model.predict(X_test)
+    fpr, tpr, thresholds = roc_curve(Y_test_true, Y_pred)
+    #auc
+    print(auc(fpr, tpr))
+    #
+    print(fpr)
+    print(tpr)
+    plt.plot(fpr,tpr)
+    plt.ylabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.show()
+    plt.savefig('roc_curve.png')
+    quit()
+    #summarize the first 10 cases
+
     #wrtie file
     myfile = open("stats_DNN", 'w')
     myfile.write("accuracy_train\n")
@@ -517,6 +603,8 @@ def train_DeepNN_model(X, Y):
     print(len(Y_train))
     print(len(Y_test))
     
+    return(model)
+
 def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
     parser = PDBParser()
     for i in range(len(list_bound_pdb_file)):
@@ -558,10 +646,10 @@ if __name__ == "__main__":
     path_aaindex='../data/aaindex'
     
     #create voxel data
-
+    """
     list_prot_vox = get_voxel_data(path_bound, list_bound_pdb_file)
     make_voxel_npy_data(list_prot_vox)
-
+    """
     #
     
     X, Y = get_X_Y(path_bound,\
@@ -572,12 +660,16 @@ if __name__ == "__main__":
                    path_file_asa_bind,\
                    path_file_pssm,\
                    path_aaindex)
+    n_1 = 0
+    for i in range(len(Y)):
+        if Y[i][1] == 1:
+            n_1 += 1
     #wrtie file
     myfile = open("stats", 'w')
     myfile.write("total\n")
     myfile.write(str(len(Y)))
-    myfile.write("\n_Y_1\n")
-    myfile.write(str(np.count_nonzero(Y)))
+    myfile.write("\nn_Y_1\n")
+    myfile.write(str(n_1))
     myfile.close()
     #
     print(X[1].shape[2], len(X[1]))
@@ -586,7 +678,6 @@ if __name__ == "__main__":
     X[1] = np.asarray(X[1])
 
     print(len(X[0]),len(X[1]),len(Y))
-    print(X[1][0])
     
     train_DeepNN_model(X, Y)
 
