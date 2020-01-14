@@ -368,7 +368,7 @@ def get_voxel_data(path_bound,\
     boxsize = [10,10,10]
     list_prot_vox = []
     parser = PDBParser()
-    for i in range(10):
+    for i in range(5):
 
         structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
         structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
@@ -389,7 +389,7 @@ def get_voxel_data(path_bound,\
 
                 list_prot_vox.append(prot_vox)
                 
-            for i in range(10):#len(residue)
+            for i in range(len(residues_2)):#len(residue)
                 print(list(residues_2[i]["CA"].get_vector()))
                 prot_vox, prot_centers, prot_N = getVoxelDescriptors(prot_2, boxsize = boxsize, center = list(residues_2[i]["CA"].get_vector()), validitychecks=False)
                 list_prot_vox.append(prot_vox)
@@ -426,7 +426,7 @@ def get_X_Y(path_bound,\
     XY = []
     index_voxel_add = 0
     list_index_voxel_add = []
-    for i in range(1):
+    for i in range(5):
         s=0
         structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
         structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
@@ -470,22 +470,19 @@ def get_X_Y(path_bound,\
             list_vector_neighbors_2_surface = []
             
             X_voxel = data = load('../data/voxel_data/voxel_data.npy')
-            print(len(X_voxel))
-            
-            
-            
+
             for i in range(len(residues_1)):
                 if i in list_interface_residue_1:
                     list_vector_neighbors_1_surface.append(list_vector_neighbors_1[i])
                     Y.append(1)
                     list_index_voxel_add.append(index_voxel_add)
-                    index_voxel_add += 1
+
                 else:
                     if i in list_surface_residue_1:
                         list_vector_neighbors_1_surface.append(list_vector_neighbors_1[i])
                         Y.append(0)
                         list_index_voxel_add.append(index_voxel_add)
-                        index_voxel_add += 1
+                index_voxel_add += 1
 
 
             for i in range(len(residues_2)):
@@ -493,13 +490,13 @@ def get_X_Y(path_bound,\
                     list_vector_neighbors_2_surface.append(list_vector_neighbors_2[i])
                     Y.append(1)
                     list_index_voxel_add.append(index_voxel_add)
-                    index_voxel_add += 1
+
                 else:
                     if i in list_surface_residue_2:
                         list_vector_neighbors_2_surface.append(list_vector_neighbors_2[i])
                         Y.append(0)
                         list_index_voxel_add.append(index_voxel_add)
-                        index_voxel_add += 1
+                index_voxel_add += 1
             X = X + list_vector_neighbors_1_surface + list_vector_neighbors_2_surface
 
         else:
@@ -512,9 +509,13 @@ def get_X_Y(path_bound,\
     X = np.asarray(X)
     
     X_voxel_final = np.asarray(X_voxel_final)
+    print(len(X_voxel_final))
+    print(len(X))
+    print(len(Y))
+    #quit()
     return([X[:len(X_voxel_final)], X_voxel_final],Y[:len(X_voxel_final)])
 
-def evaluate_model(X_test, Y_test, model, seuil):
+def evaluate_model(X_test, Y_test, model):
     Y_proba = model.predict(X_test)
     Y_pred = []
     Y_test_true = []
@@ -530,7 +531,7 @@ def evaluate_model(X_test, Y_test, model, seuil):
     print(Y_pred)
     confusion_m = confusion_matrix(Y_test_true, Y_pred)
     TN, FP, FN, TP = confusion_matrix(Y_test_true, Y_pred).ravel()
-
+    print(confusion_m)
     # Sensitivity, hit rate, recall, or true positive rate
     TPR = TP/(TP+FN)
     # Specificity or true negative rate
@@ -548,8 +549,8 @@ def evaluate_model(X_test, Y_test, model, seuil):
 
     # Overall accuracy
     ACC = (TP+TN)/(TP+FP+FN+TN)
-    print(ACC)
-    quit()
+    return(ACC)
+
 
     
 def train_DeepNN_model(X, Y):
@@ -578,14 +579,19 @@ def train_DeepNN_model(X, Y):
     #auc
     print(auc(fpr, tpr))
     #
+    #random
+    Y_test_random = np.random.randint(2, size=len(Y_test_true))
+    fpr_random, tpr_random, thresholds_random = roc_curve(Y_test_true, Y_test_random)
+    print(auc(fpr_random, tpr_random))
     print(fpr)
     print(tpr)
     plt.plot(fpr,tpr)
+    plt.plot(fpr_random,tpr_random)
     plt.ylabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.show()
     plt.savefig('roc_curve.png')
-    quit()
+
     #summarize the first 10 cases
 
     #wrtie file
@@ -602,7 +608,10 @@ def train_DeepNN_model(X, Y):
     print(len(X_train))
     print(len(Y_train))
     print(len(Y_test))
-    
+    #evaluate
+    acc = evaluate_model(X_test, Y_test, model)
+    quit()
+    #
     return(model)
 
 def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
