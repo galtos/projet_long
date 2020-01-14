@@ -6,6 +6,7 @@
 
 from Bio.PDB import * # set ref
 from Bio.PDB.DSSP import DSSP
+import argparse
 import numpy as np
 import aaindex
 import os
@@ -363,12 +364,12 @@ def get_array_vector(structure_1, structure_2):
             array_vector.append(list_vector_neighbors_1[i]+list_vector_neighbors_2[j])
     return(array_vector)
 def get_voxel_data(path_bound,\
-                   list_bound_pdb_file):
+                   list_bound_pdb_file, k, voxel_size):
     tut_data = home(dataDir='/home/sdv/m2bi/gollitrault/M2BI/projet_long/src')
-    boxsize = [10,10,10]
+    boxsize = [voxel_size,voxel_size,voxel_size]
     list_prot_vox = []
     parser = PDBParser()
-    for i in range(5):
+    for i in range(k):
 
         structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
         structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
@@ -413,7 +414,9 @@ def get_X_Y(path_bound,\
             path_file_asa,\
             path_file_asa_bind,\
             path_file_pssm,\
-            path_aaindex):
+            path_aaindex,\
+            k,\
+            X_voxel):
     """
     get X and Y vector for training
     """
@@ -426,7 +429,7 @@ def get_X_Y(path_bound,\
     XY = []
     index_voxel_add = 0
     list_index_voxel_add = []
-    for i in range(5):
+    for i in range(k):
         s=0
         structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
         structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
@@ -501,7 +504,6 @@ def get_X_Y(path_bound,\
 
         else:
             print("BAD number of residues, does not correspond dont know why")
-    X_voxel = load('../data/voxel_data/voxel_data.npy')
     X_voxel_final = []
     for i in list_index_voxel_add:
         X_voxel_final.append(X_voxel[i])
@@ -513,7 +515,7 @@ def get_X_Y(path_bound,\
     print(len(X))
     print(len(Y))
     #quit()
-    return([X[:len(X_voxel_final)], X_voxel_final],Y[:len(X_voxel_final)])
+    return([X, X_voxel_final],Y)
 
 def evaluate_model(X_test, Y_test, model):
     Y_proba = model.predict(X_test)
@@ -526,12 +528,8 @@ def evaluate_model(X_test, Y_test, model):
             Y_pred.append(1)
         else:
             Y_pred.append(0)
-    #EVALUATION
-    print(Y_test_true)
-    print(Y_pred)
-    confusion_m = confusion_matrix(Y_test_true, Y_pred)
+
     TN, FP, FN, TP = confusion_matrix(Y_test_true, Y_pred).ravel()
-    print(confusion_m)
     # Sensitivity, hit rate, recall, or true positive rate
     TPR = TP/(TP+FN)
     # Specificity or true negative rate
@@ -549,24 +547,17 @@ def evaluate_model(X_test, Y_test, model):
 
     # Overall accuracy
     ACC = (TP+TN)/(TP+FP+FN+TN)
-    return(ACC)
+    return(ACC, TPR, TNR, FPR, FNR, confusion_matrix(Y_test_true, Y_pred))
 
 
     
-def train_DeepNN_model(X, Y):
+def train_DeepNN_model(X_train, Y_train):
     model = DeepNN_model_build.build()
     model.compile(loss = "binary_crossentropy",optimizer="adam", metrics=['accuracy'])
-    X_train = [X[0][:int(len(X[0])*2/3)], X[1][:int(len(X[0])*2/3)]]
-    X_test = [X[0][int(len(X[0])*2/3):], X[1][int(len(X[0])*2/3):]]
-    Y_train = Y[:int(len(Y)*2/3)]
-    Y_test = Y[int(len(Y)*2/3):]
-    """
-    class_weights = class_weight.compute_class_weight('balanced',
-                                                 np.unique(Y_train),
-                                                 Y_train)
-                                                 """
-    model.fit(X_train, Y_train,epochs=20, batch_size = 50)
+    model.fit(X_train, Y_train,epochs=20, batch_size = 64)
+    return(model)
     
+def data_roc_curve(X_test, Y_test, model, args):
     Y_proba = model.predict(X_test)
     Y_pred = []
     Y_test_true = []
@@ -576,24 +567,21 @@ def train_DeepNN_model(X, Y):
 
     Y_proba = model.predict(X_test)
     fpr, tpr, thresholds = roc_curve(Y_test_true, Y_pred)
-    #auc
-    print(auc(fpr, tpr))
-    #
-    #random
-    Y_test_random = np.random.randint(2, size=len(Y_test_true))
-    fpr_random, tpr_random, thresholds_random = roc_curve(Y_test_true, Y_test_random)
-    print(auc(fpr_random, tpr_random))
-    print(fpr)
-    print(tpr)
-    plt.plot(fpr,tpr)
-    plt.plot(fpr_random,tpr_random)
-    plt.ylabel('False Positive Rate')
+    fpr_random, tpr_random, thresholds = roc_curve(Y_test_true, np.random.randint(2, size=len(Y_test_true)))
+    model_auc = auc(fpr, tpr)
+    args = True
+    #if args == True:
+    plt.plot(fpr,tpr, label='model')
+    plt.plot(fpr_random,tpr_random, label='random')
+    plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.show()
+    plt.legend()
     plt.savefig('roc_curve.png')
+    plt.show()
+    return(fpr, tpr, model_auc)
 
     #summarize the first 10 cases
-
+"""
     #wrtie file
     myfile = open("stats_DNN", 'w')
     myfile.write("accuracy_train\n")
@@ -613,7 +601,7 @@ def train_DeepNN_model(X, Y):
     quit()
     #
     return(model)
-
+"""
 def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
     parser = PDBParser()
     for i in range(len(list_bound_pdb_file)):
@@ -629,66 +617,201 @@ def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
         file_fasta_2.write(''.join(list(get_sequence(structure_2))))
         file_fasta_2.close()
 
-def make_voxel_npy_data(list_prot_vox):
+def make_voxel_npy_data(list_prot_vox, args):
     data = asarray(list_prot_vox)
-    save('../data/voxel_data/voxel_data.npy', data)
+    if args.test:
+        save('../data/voxel_data/Test.npy', data)
+    else:
+        save('../data/voxel_data/voxel_data.npy', data)
     
 #### MAIN ####
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument("-path_bound", nargs="?",\
+        help="path to the dockground folder benchmark",\
+        const="../data/data_struct3d_bound")
+        
+    parser.add_argument("-path_list_bound_pdb_file", nargs="?",\
+        help="path to the file/folder list of bound structures of the dockground benchmark",\
+        const="../data/data_struct3d_bound/full_structures.0.90.txt")
+        
+    parser.add_argument("-path_file_rsa", nargs="?",\
+        help="path to the file/folder with the rsa values for each residues for the structure alone  given by NACCESS",\
+        const="../data/data_struct3d_bound/templates")
+    parser.add_argument("-path_file_rsa_bind", nargs="?",\
+        help="path to the file/folder with the rsa values for each residues for the bind structure given by NACCESS",\
+        const="../data/data_struct3d_bound/templates_bind/")
+        
+    parser.add_argument("-path_file_asa", nargs="?",\
+        help="path to the file/folder with the asa values for each residues for the structure alone  given by NACCESS",\
+        const="../data/data_struct3d_bound/templates")
+    parser.add_argument("-path_file_asa_bind", nargs="?",\
+        help="path to the file/folder with the rsa values for each residues for the bind structure given by NACCESS",\
+        const="../data/data_struct3d_bound/templates_bind/")
+        
+    parser.add_argument("-path_file_pssm", nargs="?",\
+        help="path to the file/folder wit the pssm generated by psi blast",\
+        const="../data/pssm/")
+        
+    parser.add_argument("-path_aaindex", nargs="?",\
+        help="path to the folder wit the aaindex files",\
+        const="../data/aaindex")
+        
+    parser.add_argument("-roc_plot", \
+        action="store_true",\
+        help="plot the roc curve and save it as roc_curve.png")
 
+    parser.add_argument("-train",\
+        type=int,\
+        help="train the model on k number of proteins and output its carachteristics, k should be the same as k of voxel or lower")
+    parser.add_argument("-test", nargs="?",\
+        const="store_true",\
+        help="test a protein")
+    parser.add_argument("-voxel",\
+        type=int,\
+        help="compute the voxelization data for k proteins")
+    parser.add_argument("-voxel_size", nargs="?",\
+        help="chosse the box size around the CA atom",\
+        default=10)
+    parser.add_argument("-model_name", nargs="?",\
+        help="chose the model name",\
+        default="final_model.h5")
+        
+    args = parser.parse_args()
+    
+    
     #PATHS
-    path_bound = "../data/data_struct3d_bound"
-    path_list_bound_pdb_file = path_bound + "/full_structures.0.90.txt"
+    if args.path_bound:
+        path_bound = args.path_bound
+    else:
+        path_bound = "../data/data_struct3d_bound"
+    if args.path_list_bound_pdb_file:
+        path_list_bound_pdb_file = args.path_list_bound_pdb_file
+    else:
+        path_list_bound_pdb_file = path_bound + "/full_structures.0.90.txt"
+    if args.path_file_rsa:
+        path_file_rsa = args.path_file_rsa
+    else:
+        path_file_rsa = path_bound + "/templates/"
+    if args.path_file_rsa_bind:
+        path_file_rsa_bind = args.path_file_rsa_bind
+    else:
+        path_file_rsa_bind = path_bound + "/templates_bind/"
+    if args.path_file_asa:
+        path_file_asa = args.path_file_asa
+    else:
+        path_file_asa = path_bound + "/templates/"
+    if args.path_file_asa_bind:
+        path_file_asa_bind = args.path_file_asa_bind
+    else:
+        path_file_asa_bind = path_bound + "/templates_bind/"
+    if args.path_file_pssm:
+        path_file_pssm = args.path_file_pssm
+    else:
+        path_file_pssm = "../data/pssm/"
+    if args.path_aaindex:
+        path_aaindex = args.path_aaindex
+    else:
+        path_aaindex = "../data/pssm/"
+    if args.voxel_size:
+        voxel_size = args.voxel_size
+    else:
+        voxel_size = 10
 
-    #get file names
-    with open(path_list_bound_pdb_file) as file:
-        list_bound_pdb_file = file.readlines()
-    #RSA
-    path_file_rsa = path_bound + "/templates/"
-    path_file_rsa_bind = path_bound + "/templates_bind/"
-    #ASA
-    path_file_asa = path_bound + "/templates/"
-    path_file_asa_bind = path_bound + "/templates_bind/"
-    #PSSM
-    path_file_pssm = "../data/pssm/"
-    #aaindex
-    path_aaindex='../data/aaindex'
-    
     #create voxel data
-    """
-    list_prot_vox = get_voxel_data(path_bound, list_bound_pdb_file)
-    make_voxel_npy_data(list_prot_vox)
-    """
-    #
-    
-    X, Y = get_X_Y(path_bound,\
-                   path_list_bound_pdb_file,\
-                   path_file_rsa,\
-                   path_file_rsa_bind,\
-                   path_file_asa,\
-                   path_file_asa_bind,\
-                   path_file_pssm,\
-                   path_aaindex)
-    n_1 = 0
-    for i in range(len(Y)):
-        if Y[i][1] == 1:
-            n_1 += 1
-    #wrtie file
-    myfile = open("stats", 'w')
-    myfile.write("total\n")
-    myfile.write(str(len(Y)))
-    myfile.write("\nn_Y_1\n")
-    myfile.write(str(n_1))
-    myfile.close()
-    #
-    print(X[1].shape[2], len(X[1]))
-    nchannels = X[1].shape[2]
-    X[1] = X[1].transpose().reshape([len(X[1]), nchannels, 10, 10, 10])
-    X[1] = np.asarray(X[1])
+    if args.voxel:
+        with open(path_list_bound_pdb_file) as file:
+            list_bound_pdb_file = file.readlines()
+        list_prot_vox = get_voxel_data(path_bound, list_bound_pdb_file, args.voxel, voxel_size)
+        make_voxel_npy_data(list_prot_vox, args)
 
-    print(len(X[0]),len(X[1]),len(Y))
+    #
+
+    if args.train:
+        with open(path_list_bound_pdb_file) as file:
+            list_bound_pdb_file = file.readlines()
+        X_voxel = load('../data/voxel_data/voxel_data.npy')
+        X, Y = get_X_Y(path_bound,\
+                       path_list_bound_pdb_file,\
+                       path_file_rsa,\
+                       path_file_rsa_bind,\
+                       path_file_asa,\
+                       path_file_asa_bind,\
+                       path_file_pssm,\
+                       path_aaindex,\
+                       args.train,
+                       X_voxel)
+        nchannels = X[1].shape[2]
+        X[1] = X[1].transpose().reshape([len(X[1]), nchannels, voxel_size, voxel_size, voxel_size])
+        X[1] = np.asarray(X[1])
+        
+        X_train = [X[0][:int(len(X[0])*2/3)], X[1][:int(len(X[0])*2/3)]]
+        X_test = [X[0][int(len(X[0])*2/3):], X[1][int(len(X[0])*2/3):]]
+        Y_train = Y[:int(len(Y)*2/3)]
+        Y_test = Y[int(len(Y)*2/3):]
+        
+        model = train_DeepNN_model(X_train, Y_train)
+        ACC, TPR, TNR, FPR, FNR, conf_mat = evaluate_model(X_test, Y_test, model)
+        ACC_train, TPR_train, TNR_train, FPR_train, FNR_train, conf_mat_train = evaluate_model(X_train, Y_train, model)
+        fpr, tpr, auc = data_roc_curve(X_test, Y_test, model, True)
+        model.save_weights(filepath=args.model_name)
+        
+        n_1 = 0
+        for i in range(len(Y)):
+            if Y[i][1] == 1:
+                n_1 += 1
+        #wrtie file
+        myfile = open("stats.txt", 'w')
+        myfile.write("Statistics of the model:\n")
+        myfile.write("Number of interface residues\n")
+        myfile.write("\nN Total interface\n")
+        myfile.write(str(len(Y)))
+        myfile.write("\nn_Y_1\n")
+        myfile.write(str(n_1))
+        myfile.write("\nSize X_train:\n")
+        myfile.write(str(len(X_train)))
+        myfile.write("\nSize X_test:\n")
+        myfile.write(str(len(X_test)))
+        myfile.write("\nSize Y_train:\n")
+        myfile.write(str(len(Y_train)))
+        myfile.write("\nSize Y_test:\n")
+        myfile.write(str(len(Y_test)))
+        myfile.write("\nAccuracy on Test:\n")
+        myfile.write("ACC: "+str(ACC)+" TPR:"+str(TPR)+" TNR: "+str(TNR)+" FPR: "+str(FPR)+" FNR: "+str(FNR)+"\n")
+        myfile.write(str(conf_mat))
+        myfile.write("\nAccuracy on Train:\n")
+        myfile.write("ACC: "+str(ACC_train)+" TPR:"+str(TPR_train)+" TNR: "+str(TNR_train)+" FPR: "+str(FPR_train)+" FNR: "+str(FNR_train)+"\n")
+        myfile.write(str(conf_mat_train))
+        myfile.write("\n")
+        myfile.close()
+        #
+"""
+    if args.test:
+        list_prot_vox = get_voxel_data(path_bound, path_bound, args.voxel, voxel_size)
+        structure = parser.get_structure('test', args.path_bound)
+        list_dssp_features = get_SS(structure, args.path_bound)
+        list_vector_1 = get_vector(structure,\
+                                   path_file_pssm,\
+                                   path_aaindex,\
+                                   path_file_rsa,\
+                                   path_file_asa,\
+                                   list_dssp_features)
+
+        list_vector_neighbors = get_vector_neighbors(structure, list_vector)
+        model = DeepNN_model_build.build()
+        X = [list_vector_neighbors,list_prot_vox]
+        nchannels = X[1].shape[2]
+        X[1] = X[1].transpose().reshape([len(X[1]), nchannels, voxel_size, voxel_size, voxel_size])
+        X[1] = np.asarray(X[1])
+        print(len(X[0])
+        print(len(X[1])
+        print("yep")
     
-    train_DeepNN_model(X, Y)
+"""
+    
+    
+    
 
 
 
