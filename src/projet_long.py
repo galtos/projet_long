@@ -431,7 +431,6 @@ def get_voxel_data(path_bound,\
             #prot.view(guessBonds=False)
 
             for i in range(len(residues_1)):#len(residues_1)
-                print(list(residues_1[i]["CA"].get_vector()))
                 try:
                     prot_vox, prot_centers, prot_N = getVoxelDescriptors(\
                               prot_1,\
@@ -443,7 +442,6 @@ def get_voxel_data(path_bound,\
                 list_prot_vox.append(prot_vox)
                 
             for i in range(len(residues_1)):#len(residues_2)
-                print(list(residues_2[i]["CA"].get_vector()))
                 try:
                     prot_vox, prot_centers, prot_N = getVoxelDescriptors(\
                               prot_2,\
@@ -453,14 +451,6 @@ def get_voxel_data(path_bound,\
                 except:
                     return(list_prot_vox)
                 list_prot_vox.append(prot_vox)
-                
-                
-            print(prot_vox)
-            print(len(prot_vox))
-            print(prot_centers)
-            print(prot_N)
-            print(len(list_prot_vox), len(get_sequence(structure_1)))
-            print(len(list_prot_vox[0]))
             make_voxel_npy_data(list_prot_vox)
         else:
             print("BAD number of residues do not correspond dont know why")
@@ -615,10 +605,6 @@ def get_X_Y(path_bound,\
 
         else:
             print("BAD number of residues, does not correspond dont know why")
-    print(len(X_voxel))
-    print(len(X))
-    print(len(Y))
-
     X_voxel_final = []
     for i in list_index_voxel_add:
         X_voxel_final.append(X_voxel[i])
@@ -626,7 +612,7 @@ def get_X_Y(path_bound,\
     X = np.asarray(X)
     
     X_voxel_final = np.asarray(X_voxel_final)
-    print(len(X_voxel[0]))
+    print(len(X_voxel_final))
     print(len(X))
     print(len(Y))
     return([X, X_voxel_final],Y)
@@ -727,7 +713,33 @@ def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
 def make_voxel_npy_data(list_prot_vox):
     data = asarray(list_prot_vox)
     save('../data/voxel_data/voxel_data.npy', data)
+
+def get_voxel_test(test_pdb, k, voxel_size):
+    """
+    Compute a voxel around each resiude of the structure and compute 
+    the voxelization
+    """
+    tut_data = home(dataDir='/home/sdv/m2bi/gollitrault/M2BI/projet_long/src')
+    boxsize = [voxel_size,voxel_size,voxel_size]
+    list_prot_vox = []
+    parser = PDBParser()
+    structure = parser.get_structure('test', test_pdb)
+    residues = [r for r in structure.get_residues()]
+    if len(residues) == len(get_sequence(structure)):
     
+        prot = Molecule(os.path.join(tut_data, test_pdb))
+        prot = prepareProteinForAtomtyping(prot)
+        for i in range(len(residues)):#len(residues_1)
+            prot_vox, prot_centers, prot_N = getVoxelDescriptors(\
+                          prot,\
+                          boxsize = boxsize,\
+                          center = list(residues[i]["CA"].get_vector()),\
+                          validitychecks=False)
+            list_prot_vox.append(prot_vox)
+    else:
+        print("BAD number of residues do not correspond dont know why")
+    return(list_prot_vox)
+
 #### MAIN ####
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -856,7 +868,11 @@ if __name__ == "__main__":
                        args.train,
                        X_voxel)
         nchannels = X[1].shape[2]
-        X[1] = X[1].transpose().reshape([len(X[1]), nchannels, voxel_size, voxel_size, voxel_size])
+        X[1] = X[1].transpose().reshape([len(X[1]),\
+                                        nchannels,\
+                                        voxel_size,\
+                                        voxel_size,\
+                                        voxel_size])
         X[1] = np.asarray(X[1])
         
         X_train = [X[0][:int(len(X[0])*2/3)], X[1][:int(len(X[0])*2/3)]]
@@ -865,8 +881,15 @@ if __name__ == "__main__":
         Y_test = Y[int(len(Y)*2/3):]
         
         model = train_DeepNN_model(X_train, Y_train)
-        ACC, TPR, TNR, FPR, FNR, conf_mat = evaluate_model(X_test, Y_test, model)
-        ACC_train, TPR_train, TNR_train, FPR_train, FNR_train, conf_mat_train = evaluate_model(X_train, Y_train, model)
+        ACC, TPR, TNR, FPR, FNR, conf_mat = evaluate_model(X_test,\
+                                                           Y_test,\
+                                                           model)
+        ACC_train,\
+        TPR_train,\
+        TNR_train,\
+        FPR_train,\
+        FNR_train,\
+        conf_mat_train = evaluate_model(X_train, Y_train, model)
         fpr, tpr, auc = data_roc_curve(X_test, Y_test, model, True)
         model.save_weights(filepath=args.model_name)
         
@@ -883,47 +906,52 @@ if __name__ == "__main__":
         myfile.write("\nn_Y_1\n")
         myfile.write(str(n_1))
         myfile.write("\nSize X_train:\n")
-        myfile.write(str(len(X_train)))
+        myfile.write(str(len(X_train[0])))
         myfile.write("\nSize X_test:\n")
-        myfile.write(str(len(X_test)))
+        myfile.write(str(len(X_test[0])))
         myfile.write("\nSize Y_train:\n")
         myfile.write(str(len(Y_train)))
         myfile.write("\nSize Y_test:\n")
         myfile.write(str(len(Y_test)))
         myfile.write("\nAccuracy on Test:\n")
-        myfile.write("ACC: "+str(ACC)+" TPR:"+str(TPR)+" TNR: "+str(TNR)+" FPR: "+str(FPR)+" FNR: "+str(FNR)+"\n")
+        myfile.write("ACC: "+str(ACC)+" TPR:"+str(TPR)+" TNR: "+str(TNR)+\
+                     " FPR: "+str(FPR)+" FNR: "+str(FNR)+"\n")
         myfile.write(str(conf_mat))
         myfile.write("\nAccuracy on Train:\n")
-        myfile.write("ACC: "+str(ACC_train)+" TPR:"+str(TPR_train)+" TNR: "+str(TNR_train)+" FPR: "+str(FPR_train)+" FNR: "+str(FNR_train)+"\n")
+        myfile.write("ACC: "+str(ACC_train)+" TPR:"+str(TPR_train)+\
+                     " TNR: "+str(TNR_train)+" FPR: "+str(FPR_train)+\
+                     " FNR: "+str(FNR_train)+"\n")
         myfile.write(str(conf_mat_train))
         myfile.write("\n")
         myfile.close()
         #
-"""
+    test_pdb = "../data/test_file/12as0A0B_1.pdb"
+    test_rsa = "../data/test_file/12as0A0B_1.rsa"
+    test_pssm = "../data/test_file/12as0A0B_1.fasta.pssm"
     if args.test:
-        list_prot_vox = get_voxel_data(path_bound, path_bound, args.voxel, voxel_size)
-        structure = parser.get_structure('test', args.path_bound)
-        list_dssp_features = get_SS(structure, args.path_bound)
-        list_vector_1 = get_vector(structure,\
-                                   path_file_pssm,\
+        list_prot_vox = get_voxel_test(test_pdb, args.voxel, voxel_size)
+        list_prot_vox = asarray(list_prot_vox)
+        save('../data/test_file/voxel_test.npy', list_prot_vox)
+        structure = parser.get_structure('test', test_pdb)
+        list_dssp_features = get_SS(structure, test_pdb)
+        list_vector = get_vector(structure,\
+                                   test_pssm,\
                                    path_aaindex,\
-                                   path_file_rsa,\
-                                   path_file_asa,\
+                                   test_rsa,\
+                                   test_rsa,\
                                    list_dssp_features)
 
         list_vector_neighbors = get_vector_neighbors(structure, list_vector)
         model = DeepNN_model_build.build()
+        model.load_weights("final_model.h5")
         X = [list_vector_neighbors,list_prot_vox]
         nchannels = X[1].shape[2]
-        X[1] = X[1].transpose().reshape([len(X[1]), nchannels, voxel_size, voxel_size, voxel_size])
+        X[1] = X[1].transpose().reshape([len(X[1]), nchannels, voxel_size,\
+         voxel_size, voxel_size])
         X[1] = np.asarray(X[1])
-        print(len(X[0])
-        print(len(X[1])
+        print(len(X[0]))
+        print(len(X[1]))
         print("yep")
-    
-"""
-    
-    
     
 
 
