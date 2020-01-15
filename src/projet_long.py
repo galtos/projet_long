@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# ##projet long prediction of prot prot interactions
-# python test to download pdb file, extract prot sequence, set the resolution of the structure
+# projet long prediction of prot prot interactions
 
 from Bio.PDB import * # set ref
 from Bio.PDB.DSSP import DSSP
@@ -33,7 +32,8 @@ from numpy import load
 import matplotlib.pyplot as plt
 #Voxelization
 from moleculekit.molecule import Molecule
-from moleculekit.tools.voxeldescriptors import getVoxelDescriptors, viewVoxelFeatures
+from moleculekit.tools.voxeldescriptors import getVoxelDescriptors,\
+                                               viewVoxelFeatures
 from moleculekit.tools.atomtyper import prepareProteinForAtomtyping
 from moleculekit.smallmol.smallmol import SmallMol
 from moleculekit.home import home
@@ -49,62 +49,32 @@ from sklearn.utils import class_weight
 # get pdb file names
 
 def get_structure(name, path, str_structure_id):
+    """
+    take a path to a pdb file and return bioparser architecture
+    """
     parser = PDBParser()
     return(parser.get_structure(name, path + str_structure_id))
 
 # get the sequence
 def get_sequence(structure):
+    """
+    take a bioparser structure and return its sequence
+    """
     ppb = CaPPBuilder()
     for pp in ppb.build_peptides(structure):
         polypeptide = pp.get_sequence()
     return(list(polypeptide))
-"""
-def get_surface_residue(structure, path_structure, rsa_threshold, acc_array = "Sander"):
-    list_surface_residue = []
-    dssp = DSSP(structure, path_structure, acc_array = acc_array)
-    len_chain = []
-    sum_len_chain = 0
-    for chain in structure:
-        len_chain.append(len(chain))
-        
-    list_dssp = list(dssp)
-    print(len(len_chain), "__")
-    for i in range(len(len_chain)):
-        vec_surface_residue = []
-        for j in range(sum_len_chain, sum_len_chain + len_chain[i]):
-            print(j, sum_len_chain, len_chain[i])
-            if list_dssp[j][3] >= rsa_threshold:
-                vec_surface_residue.append([list_dssp[j][0], list_dssp[j][3]])
-                
-        sum_len_chain =  sum_len_chain + len_chain[i]
-        list_surface_residue.append(vec_surface_residue)
-        
-    return list_surface_residue
-"""
+
 
 def residue_distance(residue_1, residue_2):
+    """
+    Compute the distance between the CA of 2 residues
+    """
     try:
         distance = residue_1['CA'] - residue_2['CA']
     except KeyError:
         print("no CA atoms")
     return distance
-"""
-def get_interface_residue(structure_1, structure_2, distance_threshold = 8):
-    residues_1 = [r for r in structure_1.get_residues()]
-    residues_2 = [r for r in structure_2.get_residues()]
-    list_interface_residue = []
-    vector_interface_1 = np.zeros(len(residues_1))
-    vector_interface_2 = np.zeros(len(residues_2))
-    print(len(residues_1), len(residues_2))
-    for i in range(len(residues_1)):
-        for j in range(len(residues_2)):
-            distance = residue_distance(residues_1[i], residues_2[j])
-            if distance <= distance_threshold:
-                list_interface_residue.append([i, j, distance])
-                vector_interface_1[i] = 1
-                vector_interface_2[j] = 1
-    return(list_interface_residue, vector_interface_1, vector_interface_2)
-"""
 
 def get_neighbor_residues(structure, residue_middle, k_threshold=9):
     residues = [r for r in structure.get_residues()]
@@ -115,6 +85,9 @@ def get_neighbor_residues(structure, residue_middle, k_threshold=9):
     return(sorted(residue_distance, key=operator.itemgetter(1))[0:k_threshold])
 
 def get_rsa_relative(path_file_rsa):
+    """
+    get a list of the RSA values for one structure given the Naccess .rsa file
+    """
     list_relative_rsa = []
     for line in open(path_file_rsa):
         list = line.split()
@@ -124,6 +97,9 @@ def get_rsa_relative(path_file_rsa):
             list_relative_rsa.append(float(relative_rsa))
     return(list_relative_rsa)
 def get_asa_value(path_file_asa):
+    """
+    get a list of the ASA values for one srtuctures given the Naccess .rsa file
+    """
     list_asa_value = []
     for line in open(path_file_asa):
         list = line.split()
@@ -134,6 +110,10 @@ def get_asa_value(path_file_asa):
     return(list_asa_value)
     
 def get_rsa_relative_bind(path_file_rsa):
+    """
+    get a list of the RSA values for two srtuctures in their bind state
+     given the Naccess .rsa file. return 2 lists of their RSA values
+    """
     list_relative_rsa = [[]]
     struct_flag = 2
     for line in open(path_file_rsa):
@@ -153,6 +133,9 @@ def get_rsa_relative_bind(path_file_rsa):
     return((list_relative_rsa[0],list_relative_rsa[1]))
     
 def get_surface_residue(list_relative_rsa, threshold_rsa = 0.25):
+    """
+    given a list of RSA values get the surface residues according a threshold
+    """
     list_surface_residue = []
     for i in range(len(list_relative_rsa)):
         if list_relative_rsa[i] >= threshold_rsa:
@@ -160,6 +143,10 @@ def get_surface_residue(list_relative_rsa, threshold_rsa = 0.25):
     return(list_surface_residue)
     
 def get_interface_residue(list_relative_rsa, list_relative_rsa_bind):
+    """
+    given a list of the RSA values of the structure alone and bind return
+    a list of interface residues
+    """
     list_interface_residue = []
     for i in range(len(list_relative_rsa)):
         if list_relative_rsa[i] != list_relative_rsa_bind[i]:
@@ -167,6 +154,9 @@ def get_interface_residue(list_relative_rsa, list_relative_rsa_bind):
     return(list_interface_residue)
 
 def count_intersect_surface_interface_residue(list_surface_residue, list_interface_residue):
+    """
+    count the number of surface residues in the interface
+    """
     k = 0
     for i in range(len(list_surface_residue)):
         for j in range(len(list_interface_residue)):
@@ -174,6 +164,9 @@ def count_intersect_surface_interface_residue(list_surface_residue, list_interfa
                 k = k+1
     print(k)
 def get_pssm_value(path_pssm):
+    """
+    parse pssm file to get a list of the ipp values and rwgrmtp values
+    """
     list_ipp_value = []
     list_rwgrmtp_value = []
     for line in open(path_pssm):
@@ -182,10 +175,19 @@ def get_pssm_value(path_pssm):
         line = line.split(' ')
         if len(line) >= 44:
             list_ipp_value.append(float(line[-2]))
-            list_rwgrmtp_value.append( float(line[-1]) if line[-1] != "inf" else "inf" )
+            list_rwgrmtp_value.append(\
+            float(line[-1]) if line[-1] != "inf" else "inf" )
     return((list_ipp_value,list_rwgrmtp_value))
 
 def get_SS(structure, path_structure):
+    """
+    given a structure
+    return a list of 3 features coresspondig to the secondary structure 
+    for each residue
+    Helix : (0,0,1)
+    Sheet : (0,1,0)
+    Coil : (1,0,0)
+    """
     list_SS = []
     dssp = DSSP(structure[0], path_structure)
     list_dssp = list(dssp)
@@ -193,36 +195,21 @@ def get_SS(structure, path_structure):
 
     for i in range(len(list_dssp)):
         value_dssp = list(list_dssp[i])
-        if value_dssp[2] == "G" or value_dssp[2] == "H" or value_dssp[2] == "I":
+        if value_dssp[2] == "G" or\
+           value_dssp[2] == "H" or\
+           value_dssp[2] == "I":
             list_dssp_features.append([1,0,0])
         elif value_dssp[2] or value_dssp[2] == "B" or value_dssp[2] =="E":
             list_dssp_features.append([0,1,0])
-        elif value_dssp[2] or value_dssp[2] == "T" or value_dssp[2] =="S" or value_dssp[2] =="-":
+        elif value_dssp[2] or value_dssp[2] == "T" or\
+       value_dssp[2] =="S" or value_dssp[2] =="-":
             list_dssp_features.append([0,1,0])
     return(list_dssp_features)
-"""
-def set_propka():
-    pdbs = ['1FTJ-Chain-A',
-                '1HPX',
-                '4DFR']
 
-        test_dir = os.path.dirname(__file__)
-        base_dir = os.path.dirname(test_dir)
-
-        executable = os.path.join(base_dir, "scripts", "propka31.py")
-
-        env = { "PYTHONPATH" : base_dir }
-
-        for pdb in pdbs:
-            input_filename = os.path.join(test_dir, "pdb", pdb + ".pdb")
-            output_filename = os.path.join(test_dir, pdb + ".out")
-
-            output_file = open(output_filename, "w")
-            call([sys.executable, executable, input_filename],
-                    stdout=output_file, env=env)
-            output_file.close()
-"""
 def get_aaindex_features(AA):
+    """
+    given an amino acid return its physicochemical features
+    """
     aaindex.init(path='../data/aaindex')
     Hydrophobicity = aaindex.get('ARGP820101')
     Hydrophilicity = aaindex.get('HOPT810101')
@@ -252,11 +239,17 @@ def get_aaindex_features(AA):
     return(aaindex_feature)
     
 def get_pseudo_hydrophobicity(AA, Hydrophobicity, Charge):
+    """
+    for an amino acid return its pseudo hydrophobicity
+    """
     if Charge.get(AA) < 0:
         return(Hydrophobicity.get(AA)*Charge.get(AA))
     return(Hydrophobicity.get(AA))
 
 def get_max_psicov(path_psicov, size_seq):
+    """
+    get the max value of psicov data
+    """
     list_max_coev = np.zeros((size_seq, size_seq))
     for line in open(path_psicov):
         line = line.rstrip()
@@ -264,7 +257,16 @@ def get_max_psicov(path_psicov, size_seq):
         list_max_coev[int(line[0])-1][int(line[1])-1] = float(line[4])
     return(np.amax(list_max_coev, axis=1))
 
-def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file_asa, list_dssp_features):
+def get_vector(structure,\
+               path_file_pssm,\
+               path_aaindex,\
+               path_file_rsa,\
+               path_file_asa,\
+               list_dssp_features):
+    """
+    get the features vector for a structure, returna list of all the features
+    for each residue
+    """
     aaindex.init(path_aaindex)
 
     Hydrophobicity = aaindex.get('ARGP820101')
@@ -281,13 +283,7 @@ def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file
     Electron_ion_interaction_potential = aaindex.get('VELV850101')
     
     list_vector = []
-    """
-    residues = structure_1[0].get_residues()
-    for residue in residues:
-        residue.get_resname()
-        
-    ppb=PPBuilder()
-    """
+
     #asa
     list_asa_value = get_asa_value(path_file_asa)
     #rsa
@@ -335,13 +331,17 @@ def get_vector(structure, path_file_pssm, path_aaindex, path_file_rsa, path_file
                            #             
     return(list_vector)
 def get_vector_neighbors(structure, list_vector):
+    """
+    compute the vector with neigbohrs features for each residue
+    """
     list_vector_neighbors = []
     residues = structure.get_residues()
     for residue in residues:
         list_neighbors = get_neighbor_residues(structure, residue)
         vector_neighbors = []
         for neigbor in range(len(list_neighbors)):
-            vector_neighbors = vector_neighbors + list_vector[list_neighbors[neigbor][0]]
+            vector_neighbors = vector_neighbors +\
+                               list_vector[list_neighbors[neigbor][0]]
         list_vector_neighbors.append(vector_neighbors)
     return(list_vector_neighbors)
 
@@ -354,45 +354,104 @@ def get_array_vector(structure_1, structure_2):
     for pp in ppb.build_peptides(structure_2[0]):
         sequence_2 = list(pp.get_sequence())
         
-    list_vector_1 = get_vector(structure_1[0], path_file_pssm, "", path_file_rsa, path_file_rsa)
-    list_vector_2 = get_vector(structure_2[0], path_file_pssm, "", path_file_rsa, path_file_rsa)
-    list_vector_neighbors_1 = get_vector_neighbors(structure_1[0], list_vector_1)
-    list_vector_neighbors_2 = get_vector_neighbors(structure_2[0], list_vector_2)
+    list_vector_1 = get_vector(structure_1[0],\
+                               path_file_pssm,\
+                                "",\
+                               path_file_rsa,\
+                               path_file_rsa)
+    list_vector_2 = get_vector(structure_2[0],\
+                               path_file_pssm,\
+                                "",\
+                               path_file_rsa,\
+                               path_file_rsa)
+    list_vector_neighbors_1 = get_vector_neighbors(structure_1[0],\
+                                                   list_vector_1)
+    list_vector_neighbors_2 = get_vector_neighbors(structure_2[0],\
+                                                   list_vector_2)
     array_vector = []
     for i in range(len(sequence_1)):
         for j in range(len(sequence_2)):
-            array_vector.append(list_vector_neighbors_1[i]+list_vector_neighbors_2[j])
+            array_vector.append(list_vector_neighbors_1[i]+\
+                                list_vector_neighbors_2[j])
     return(array_vector)
 def get_voxel_data(path_bound,\
                    list_bound_pdb_file, k, voxel_size):
+    """
+    Compute a voxel around each resiude of the structure and compute 
+    the voxelization
+    """
     tut_data = home(dataDir='/home/sdv/m2bi/gollitrault/M2BI/projet_long/src')
     boxsize = [voxel_size,voxel_size,voxel_size]
     list_prot_vox = []
     parser = PDBParser()
     for i in range(k):
 
-        structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
-        structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
+        structure_1 = parser.get_structure('test_bound_1',\
+                                            path_bound + \
+                                            "/templates/" +\
+                                            list_bound_pdb_file[i][0:-1]+\
+                                            '_1.pdb')
+        structure_2 = parser.get_structure('test_bound_2',\
+                                            path_bound +\
+                                            "/templates/" +\
+                                            list_bound_pdb_file[i][0:-1]+\
+                                            '_2.pdb')
         
         residues_1 = [r for r in structure_1.get_residues()]
         residues_2 = [r for r in structure_1.get_residues()]
-        if len(residues_1) == len(get_sequence(structure_1)) and len(residues_2) == len(get_sequence(structure_2)):
+        if len(residues_1) == len(get_sequence(structure_1)) and\
+           len(residues_2) == len(get_sequence(structure_2)):
             #vox
-            prot_1 = Molecule(os.path.join(tut_data, path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb'))
-            prot_2 = Molecule(os.path.join(tut_data, path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb'))
-            prot_1 = prepareProteinForAtomtyping(prot_1)
-            prot_2 = prepareProteinForAtomtyping(prot_2)
+            try:
+                prot_1 = Molecule(os.path.join(tut_data,\
+                                               path_bound +\
+                                               "/templates/" +\
+                                               list_bound_pdb_file[i][0:-1]+\
+                                               '_1.pdb'))
+            except:
+                return(list_prot_vox)
+            try:
+                prot_2 = Molecule(os.path.join(tut_data,\
+                                               path_bound +\
+                                               "/templates/" +\
+                                               list_bound_pdb_file[i][0:-1]+\
+                                               '_2.pdb'))
+            except:
+                return(list_prot_vox)
+            
+            try:
+                prot_1 = prepareProteinForAtomtyping(prot_1)
+            except:
+                return(list_prot_vox)
+            
+            try:
+                prot_2 = prepareProteinForAtomtyping(prot_2)
+            except:
+                return(list_prot_vox)
             #prot.view(guessBonds=False)
 
-            for i in range(len(residues_1)):#len(residue)
+            for i in range(len(residues_1)):#len(residues_1)
                 print(list(residues_1[i]["CA"].get_vector()))
-                prot_vox, prot_centers, prot_N = getVoxelDescriptors(prot_1, boxsize = boxsize, center = list(residues_1[i]["CA"].get_vector()), validitychecks=False)
-
+                try:
+                    prot_vox, prot_centers, prot_N = getVoxelDescriptors(\
+                              prot_1,\
+                              boxsize = boxsize,\
+                              center = list(residues_1[i]["CA"].get_vector()),\
+                              validitychecks=False)
+                except:
+                    return(list_prot_vox)
                 list_prot_vox.append(prot_vox)
                 
-            for i in range(len(residues_2)):#len(residue)
+            for i in range(len(residues_1)):#len(residues_2)
                 print(list(residues_2[i]["CA"].get_vector()))
-                prot_vox, prot_centers, prot_N = getVoxelDescriptors(prot_2, boxsize = boxsize, center = list(residues_2[i]["CA"].get_vector()), validitychecks=False)
+                try:
+                    prot_vox, prot_centers, prot_N = getVoxelDescriptors(\
+                              prot_2,\
+                              boxsize = boxsize,\
+                              center = list(residues_2[i]["CA"].get_vector()),\
+                              validitychecks=False)
+                except:
+                    return(list_prot_vox)
                 list_prot_vox.append(prot_vox)
                 
                 
@@ -402,6 +461,7 @@ def get_voxel_data(path_bound,\
             print(prot_N)
             print(len(list_prot_vox), len(get_sequence(structure_1)))
             print(len(list_prot_vox[0]))
+            make_voxel_npy_data(list_prot_vox)
         else:
             print("BAD number of residues do not correspond dont know why")
     
@@ -431,43 +491,89 @@ def get_X_Y(path_bound,\
     list_index_voxel_add = []
     for i in range(k):
         s=0
-        structure_1 = parser.get_structure('test_bound_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
-        structure_2 = parser.get_structure('test_bound_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
-        structure_12 = parser.get_structure('test_bound_12', path_bound + "/templates_bind/" + list_bound_pdb_file[i][0:-1]+'.pdb')
+        structure_1 = parser.get_structure('test_bound_1',\
+                                            path_bound +\
+                                           "/templates/" +\
+                                            list_bound_pdb_file[i][0:-1]+\
+                                           '_1.pdb')
+        structure_2 = parser.get_structure('test_bound_2',\
+                                            path_bound +\
+                                           "/templates/" +\
+                                            list_bound_pdb_file[i][0:-1]+\
+                                           '_2.pdb')
+        structure_12 = parser.get_structure('test_bound_12',\
+                                             path_bound +\
+                                            "/templates_bind/" +\
+                                             list_bound_pdb_file[i][0:-1]+\
+                                            '.pdb')
         
         residues_1 = [r for r in structure_1.get_residues()]
         residues_2 = [r for r in structure_1.get_residues()]
-        if len(residues_1) == len(get_sequence(structure_1)) and len(residues_2) == len(get_sequence(structure_2)):
+        if len(residues_1) == len(get_sequence(structure_1)) and\
+           len(residues_2) == len(get_sequence(structure_2)):
             
-            list_value_rsa_1 = get_rsa_relative(path_file_rsa + list_bound_pdb_file[i][0:-1]+ '_1.rsa')
-            list_value_rsa_2 = get_rsa_relative(path_file_rsa + list_bound_pdb_file[i][0:-1]+ '_2.rsa')
+            list_value_rsa_1 = get_rsa_relative(path_file_rsa +\
+                                                list_bound_pdb_file[i][0:-1]+\
+                                                '_1.rsa')
+            list_value_rsa_2 = get_rsa_relative(path_file_rsa +\
+                                                list_bound_pdb_file[i][0:-1]+\
+                                                '_2.rsa')
             
-            list_relative_rsa_bind_1, list_relative_rsa_bind_2 = get_rsa_relative_bind(path_file_rsa_bind + list_bound_pdb_file[i][0:-1]+ '.rsa')
+            list_relative_rsa_bind_1, list_relative_rsa_bind_2 =\
+                                    get_rsa_relative_bind(path_file_rsa_bind +\
+                                    list_bound_pdb_file[i][0:-1]+\
+                                    '.rsa')
             
-            list_dssp_features_1 = get_SS(structure_1, path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
-            list_dssp_features_2 = get_SS(structure_2, path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
+            list_dssp_features_1 = get_SS(structure_1,\
+                                          path_bound +\
+                                          "/templates/" +\
+                                          list_bound_pdb_file[i][0:-1]+\
+                                          '_1.pdb')
+            list_dssp_features_2 = get_SS(structure_2,\
+                                          path_bound +\
+                                          "/templates/" +\
+                                          list_bound_pdb_file[i][0:-1]+\
+                                          '_2.pdb')
 
-            list_surface_residue_1 = get_surface_residue(list_value_rsa_1, threshold_rsa = 30)
-            list_surface_residue_2 = get_surface_residue(list_value_rsa_2, threshold_rsa = 30)
+            list_surface_residue_1 = get_surface_residue(list_value_rsa_1,\
+                                                         threshold_rsa = 30)
+            list_surface_residue_2 = get_surface_residue(list_value_rsa_2,\
+                                                         threshold_rsa = 30)
 
-            list_interface_residue_1 = get_interface_residue(list_value_rsa_1, list_relative_rsa_bind_1)
-            list_interface_residue_2 = get_interface_residue(list_value_rsa_2, list_relative_rsa_bind_2)
+            list_interface_residue_1 = get_interface_residue(list_value_rsa_1,\
+                                                      list_relative_rsa_bind_1)
+            list_interface_residue_2 = get_interface_residue(list_value_rsa_2,\
+                                                      list_relative_rsa_bind_2)
 
             list_vector_1 = get_vector(structure_1,\
-                                       path_file_pssm + list_bound_pdb_file[i][0:-1] + '_1.fasta.pssm',\
+                                       path_file_pssm +\
+                                       list_bound_pdb_file[i][0:-1] +\
+                                       '_1.fasta.pssm',\
                                        path_aaindex,\
-                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_1.rsa',\
-                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_1.rsa',\
+                                       path_file_rsa +\
+                                       list_bound_pdb_file[i][0:-1] +\
+                                       '_1.rsa',\
+                                       path_file_rsa +\
+                                       list_bound_pdb_file[i][0:-1] +\
+                                       '_1.rsa',\
                                        list_dssp_features_1)
             list_vector_2 = get_vector(structure_2,\
-                                       path_file_pssm + list_bound_pdb_file[i][0:-1] + '_2.fasta.pssm',\
+                                       path_file_pssm +\
+                                       list_bound_pdb_file[i][0:-1] +\
+                                       '_2.fasta.pssm',\
                                        path_aaindex,\
-                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_2.rsa',\
-                                       path_file_rsa + list_bound_pdb_file[i][0:-1] + '_2.rsa',\
+                                       path_file_rsa +\
+                                       list_bound_pdb_file[i][0:-1] +\
+                                       '_2.rsa',\
+                                       path_file_rsa +\
+                                       list_bound_pdb_file[i][0:-1] +\
+                                       '_2.rsa',\
                                        list_dssp_features_2)
 
-            list_vector_neighbors_1 = get_vector_neighbors(structure_1, list_vector_1)
-            list_vector_neighbors_2 = get_vector_neighbors(structure_2, list_vector_2)
+            list_vector_neighbors_1 = get_vector_neighbors(structure_1,\
+                                                           list_vector_1)
+            list_vector_neighbors_2 = get_vector_neighbors(structure_2,\
+                                                           list_vector_2)
 
             list_vector_neighbors_1_surface = []
             list_vector_neighbors_2_surface = []
@@ -476,13 +582,15 @@ def get_X_Y(path_bound,\
 
             for i in range(len(residues_1)):
                 if i in list_interface_residue_1:
-                    list_vector_neighbors_1_surface.append(list_vector_neighbors_1[i])
+                    list_vector_neighbors_1_surface.append(\
+                                                    list_vector_neighbors_1[i])
                     Y.append(1)
                     list_index_voxel_add.append(index_voxel_add)
 
                 else:
                     if i in list_surface_residue_1:
-                        list_vector_neighbors_1_surface.append(list_vector_neighbors_1[i])
+                        list_vector_neighbors_1_surface.append(\
+                                                    list_vector_neighbors_1[i])
                         Y.append(0)
                         list_index_voxel_add.append(index_voxel_add)
                 index_voxel_add += 1
@@ -490,20 +598,27 @@ def get_X_Y(path_bound,\
 
             for i in range(len(residues_2)):
                 if i in list_interface_residue_2:
-                    list_vector_neighbors_2_surface.append(list_vector_neighbors_2[i])
+                    list_vector_neighbors_2_surface.append(\
+                                                    list_vector_neighbors_2[i])
                     Y.append(1)
                     list_index_voxel_add.append(index_voxel_add)
 
                 else:
                     if i in list_surface_residue_2:
-                        list_vector_neighbors_2_surface.append(list_vector_neighbors_2[i])
+                        list_vector_neighbors_2_surface.append(\
+                                                    list_vector_neighbors_2[i])
                         Y.append(0)
                         list_index_voxel_add.append(index_voxel_add)
                 index_voxel_add += 1
-            X = X + list_vector_neighbors_1_surface + list_vector_neighbors_2_surface
+            X = X + list_vector_neighbors_1_surface +\
+                    list_vector_neighbors_2_surface
 
         else:
             print("BAD number of residues, does not correspond dont know why")
+    print(len(X_voxel))
+    print(len(X))
+    print(len(Y))
+
     X_voxel_final = []
     for i in list_index_voxel_add:
         X_voxel_final.append(X_voxel[i])
@@ -511,10 +626,9 @@ def get_X_Y(path_bound,\
     X = np.asarray(X)
     
     X_voxel_final = np.asarray(X_voxel_final)
-    print(len(X_voxel_final))
+    print(len(X_voxel[0]))
     print(len(X))
     print(len(Y))
-    #quit()
     return([X, X_voxel_final],Y)
 
 def evaluate_model(X_test, Y_test, model):
@@ -553,7 +667,8 @@ def evaluate_model(X_test, Y_test, model):
     
 def train_DeepNN_model(X_train, Y_train):
     model = DeepNN_model_build.build()
-    model.compile(loss = "binary_crossentropy",optimizer="adam", metrics=['accuracy'])
+    model.compile(loss = "binary_crossentropy",optimizer="adam",\
+                                               metrics=['accuracy'])
     model.fit(X_train, Y_train,epochs=20, batch_size = 64)
     return(model)
     
@@ -567,7 +682,9 @@ def data_roc_curve(X_test, Y_test, model, args):
 
     Y_proba = model.predict(X_test)
     fpr, tpr, thresholds = roc_curve(Y_test_true, Y_pred)
-    fpr_random, tpr_random, thresholds = roc_curve(Y_test_true, np.random.randint(2, size=len(Y_test_true)))
+    fpr_random, tpr_random, thresholds = roc_curve(Y_test_true,\
+                                                   np.random.randint(2,\
+                                                    size=len(Y_test_true)))
     model_auc = auc(fpr, tpr)
     args = True
     #if args == True:
@@ -580,49 +697,36 @@ def data_roc_curve(X_test, Y_test, model, args):
     plt.show()
     return(fpr, tpr, model_auc)
 
-    #summarize the first 10 cases
-"""
-    #wrtie file
-    myfile = open("stats_DNN", 'w')
-    myfile.write("accuracy_train\n")
-    myfile.write(str(model.evaluate(X_train, Y_train)))
-    myfile.write("\naccuracy_test\n")
-    myfile.write(str(model.evaluate(X_test, Y_test)))
-    myfile.close()
-    #
-    model.save_weights(filepath='final_model.h5')
-    print(len(X_train))
-    print(len(X_test))
-    print(len(X_train))
-    print(len(Y_train))
-    print(len(Y_test))
-    #evaluate
-    acc = evaluate_model(X_test, Y_test, model)
-    quit()
-    #
-    return(model)
-"""
 def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
     parser = PDBParser()
     for i in range(len(list_bound_pdb_file)):
-        structure_1 = parser.get_structure(list_bound_pdb_file[i][0:-1]+ '_1', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_1.pdb')
-        structure_2 = parser.get_structure(list_bound_pdb_file[i][0:-1]+ '_2', path_bound + "/templates/" + list_bound_pdb_file[i][0:-1]+ '_2.pdb')
+        structure_1 = parser.get_structure(list_bound_pdb_file[i][0:-1]+\
+                                           '_1',\
+                                           path_bound +\
+                                           "/templates/" +\
+                                           list_bound_pdb_file[i][0:-1]+\
+                                           '_1.pdb')
+        structure_2 = parser.get_structure(list_bound_pdb_file[i][0:-1]+\
+                                           '_2',\
+                                           path_bound +\
+                                           "/templates/" +\
+                                           list_bound_pdb_file[i][0:-1]+\
+                                           '_2.pdb')
         
-        file_fasta_1 = open(path_fasta + list_bound_pdb_file[i][0:-1]+'_1.fasta', 'w')
+        file_fasta_1 = open(path_fasta + list_bound_pdb_file[i][0:-1]+\
+                            '_1.fasta', 'w')
         file_fasta_1.write('>'+list_bound_pdb_file[i][0:-1]+ '_1'+"\n")
         file_fasta_1.write(''.join(list(get_sequence(structure_1))))
         file_fasta_1.close()
-        file_fasta_2 = open(path_fasta + list_bound_pdb_file[i][0:-1]+'_2.fasta', 'w')
+        file_fasta_2 = open(path_fasta + list_bound_pdb_file[i][0:-1]+\
+                            '_2.fasta', 'w')
         file_fasta_2.write('>'+list_bound_pdb_file[i][0:-1]+ '_2'+"\n")
         file_fasta_2.write(''.join(list(get_sequence(structure_2))))
         file_fasta_2.close()
 
-def make_voxel_npy_data(list_prot_vox, args):
+def make_voxel_npy_data(list_prot_vox):
     data = asarray(list_prot_vox)
-    if args.test:
-        save('../data/voxel_data/Test.npy', data)
-    else:
-        save('../data/voxel_data/voxel_data.npy', data)
+    save('../data/voxel_data/voxel_data.npy', data)
     
 #### MAIN ####
 if __name__ == "__main__":
@@ -633,21 +737,26 @@ if __name__ == "__main__":
         const="../data/data_struct3d_bound")
         
     parser.add_argument("-path_list_bound_pdb_file", nargs="?",\
-        help="path to the file/folder list of bound structures of the dockground benchmark",\
+        help="path to the file/folder list of bound structures of the"+\
+             " dockground benchmark",\
         const="../data/data_struct3d_bound/full_structures.0.90.txt")
         
     parser.add_argument("-path_file_rsa", nargs="?",\
-        help="path to the file/folder with the rsa values for each residues for the structure alone  given by NACCESS",\
+        help="path to the file/folder with the rsa values for each residues"+\
+             " for the structure alone  given by NACCESS",\
         const="../data/data_struct3d_bound/templates")
     parser.add_argument("-path_file_rsa_bind", nargs="?",\
-        help="path to the file/folder with the rsa values for each residues for the bind structure given by NACCESS",\
+        help="path to the file/folder with the rsa values for each residues"+\
+             " for the bind structure given by NACCESS",\
         const="../data/data_struct3d_bound/templates_bind/")
         
     parser.add_argument("-path_file_asa", nargs="?",\
-        help="path to the file/folder with the asa values for each residues for the structure alone  given by NACCESS",\
+        help="path to the file/folder with the asa values for each residues"+\
+             " for the structure alone  given by NACCESS",\
         const="../data/data_struct3d_bound/templates")
     parser.add_argument("-path_file_asa_bind", nargs="?",\
-        help="path to the file/folder with the rsa values for each residues for the bind structure given by NACCESS",\
+        help="path to the file/folder with the rsa values for each residues"+\
+             " for the bind structure given by NACCESS",\
         const="../data/data_struct3d_bound/templates_bind/")
         
     parser.add_argument("-path_file_pssm", nargs="?",\
@@ -664,7 +773,8 @@ if __name__ == "__main__":
 
     parser.add_argument("-train",\
         type=int,\
-        help="train the model on k number of proteins and output its carachteristics, k should be the same as k of voxel or lower")
+        help="train the model on k number of proteins and output its "+\
+             "carachteristics, k should be the same as k of voxel or lower")
     parser.add_argument("-test", nargs="?",\
         const="store_true",\
         help="test a protein")
@@ -723,15 +833,18 @@ if __name__ == "__main__":
     if args.voxel:
         with open(path_list_bound_pdb_file) as file:
             list_bound_pdb_file = file.readlines()
-        list_prot_vox = get_voxel_data(path_bound, list_bound_pdb_file, args.voxel, voxel_size)
-        make_voxel_npy_data(list_prot_vox, args)
+        list_prot_vox = get_voxel_data(path_bound,\
+                                       list_bound_pdb_file,\
+                                       args.voxel,\
+                                       voxel_size)
+        make_voxel_npy_data(list_prot_vox)
 
     #
 
     if args.train:
         with open(path_list_bound_pdb_file) as file:
             list_bound_pdb_file = file.readlines()
-        X_voxel = load('../data/voxel_data/voxel_data.npy')
+        X_voxel = load('../data/voxel_data/Test.npy')
         X, Y = get_X_Y(path_bound,\
                        path_list_bound_pdb_file,\
                        path_file_rsa,\
