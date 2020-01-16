@@ -7,6 +7,7 @@ from Bio.PDB import * # set ref
 from Bio.PDB.DSSP import DSSP
 import argparse
 import numpy as np
+import random
 import aaindex
 import os
 import re
@@ -21,7 +22,6 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve
 from sklearn.metrics import auc
 #pssm
-from Bio import AlignIO
 #mutual information
 #from MI import Statistics
 #numpy to npy
@@ -44,7 +44,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 #
 from sklearn.utils import class_weight
-
+from sklearn.model_selection import train_test_split
 									
 # get pdb file names
 
@@ -479,6 +479,8 @@ def get_X_Y(path_bound,\
     XY = []
     index_voxel_add = 0
     list_index_voxel_add = []
+    non_interface = []
+    non_interface_nonsurface = []
     for i in range(k):
         s=0
         structure_1 = parser.get_structure('test_bound_1',\
@@ -526,9 +528,9 @@ def get_X_Y(path_bound,\
                                           '_2.pdb')
 
             list_surface_residue_1 = get_surface_residue(list_value_rsa_1,\
-                                                         threshold_rsa = 30)
+                                                         threshold_rsa = 20)
             list_surface_residue_2 = get_surface_residue(list_value_rsa_2,\
-                                                         threshold_rsa = 30)
+                                                         threshold_rsa = 20)
 
             list_interface_residue_1 = get_interface_residue(list_value_rsa_1,\
                                                       list_relative_rsa_bind_1)
@@ -569,7 +571,6 @@ def get_X_Y(path_bound,\
             list_vector_neighbors_2_surface = []
             
             X_voxel = data = load('../data/voxel_data/voxel_data.npy')
-
             for i in range(len(residues_1)):
                 if i in list_interface_residue_1:
                     list_vector_neighbors_1_surface.append(\
@@ -578,11 +579,13 @@ def get_X_Y(path_bound,\
                     list_index_voxel_add.append(index_voxel_add)
 
                 else:
+                    list_vector_neighbors_1_surface.append(\
+                                                list_vector_neighbors_1[i])
+                    Y.append(0)
                     if i in list_surface_residue_1:
-                        list_vector_neighbors_1_surface.append(\
-                                                    list_vector_neighbors_1[i])
-                        Y.append(0)
-                        list_index_voxel_add.append(index_voxel_add)
+                        non_interface.append(index_voxel_add)
+                    else:
+                        non_interface_nonsurface.append(index_voxel_add)
                 index_voxel_add += 1
 
 
@@ -594,30 +597,51 @@ def get_X_Y(path_bound,\
                     list_index_voxel_add.append(index_voxel_add)
 
                 else:
+
+                    list_vector_neighbors_2_surface.append(\
+                                                list_vector_neighbors_2[i])
+                    Y.append(0)
                     if i in list_surface_residue_2:
-                        list_vector_neighbors_2_surface.append(\
-                                                    list_vector_neighbors_2[i])
-                        Y.append(0)
-                        list_index_voxel_add.append(index_voxel_add)
+                        non_interface.append(index_voxel_add)
+                    else:
+                        non_interface_nonsurface.append(index_voxel_add)
+                        
                 index_voxel_add += 1
             X = X + list_vector_neighbors_1_surface +\
                     list_vector_neighbors_2_surface
 
         else:
             print("BAD number of residues, does not correspond dont know why")
+    sampling_surface = random.choices(non_interface, k=int(Y.count(1)*2/4))
+    sampling_nonsurface = random.choices(non_interface_nonsurface, k=int(Y.count(1)*2/4))
+    sampling = sampling_surface + sampling_nonsurface
+
     X_voxel_final = []
-    for i in list_index_voxel_add:
-        X_voxel_final.append(X_voxel[i])
-    Y = to_categorical(Y, num_classes=2)
-    X = np.asarray(X)
+    X_final = []
+    Y_final = []
+    for i in range(len(X)):
+        if i in list_index_voxel_add:
+            X_voxel_final.append(X_voxel[i])
+            X_final.append(X[i])
+            Y_final.append(Y[i])
+        elif i in sampling:
+            X_voxel_final.append(X_voxel[i])
+            X_final.append(X[i])
+            Y_final.append(Y[i])
+    X_final = np.asarray(X_final)
     
     X_voxel_final = np.asarray(X_voxel_final)
+    Y_final = to_categorical(Y_final, num_classes=2)
     print(len(X_voxel_final))
-    print(len(X))
-    print(len(Y))
-    return([X, X_voxel_final],Y)
+    print(len(X_final))
+    print(len(Y_final))
+
+    return([X_final, X_voxel_final],Y_final)
 
 def evaluate_model(X_test, Y_test, model):
+    """
+    compute the evaluation of the model
+    """
     Y_proba = model.predict(X_test)
     Y_pred = []
     Y_test_true = []
@@ -652,6 +676,9 @@ def evaluate_model(X_test, Y_test, model):
 
     
 def train_DeepNN_model(X_train, Y_train):
+    """
+    Train the model for a given inputs return the model
+    """
     model = DeepNN_model_build.build()
     model.compile(loss = "binary_crossentropy",optimizer="adam",\
                                                metrics=['accuracy'])
@@ -659,6 +686,9 @@ def train_DeepNN_model(X_train, Y_train):
     return(model)
     
 def data_roc_curve(X_test, Y_test, model, args):
+    """
+    plot the roc curve
+    """
     Y_proba = model.predict(X_test)
     Y_pred = []
     Y_test_true = []
@@ -684,6 +714,9 @@ def data_roc_curve(X_test, Y_test, model, args):
     return(fpr, tpr, model_auc)
 
 def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
+    """
+    make fasta file from structure
+    """
     parser = PDBParser()
     for i in range(len(list_bound_pdb_file)):
         structure_1 = parser.get_structure(list_bound_pdb_file[i][0:-1]+\
@@ -711,6 +744,9 @@ def make_fasta(list_bound_pdb_file, path_bound, path_fasta = "../data/fasta/"):
         file_fasta_2.close()
 
 def make_voxel_npy_data(list_prot_vox):
+    """
+    make voxel data file
+    """
     data = asarray(list_prot_vox)
     save('../data/voxel_data/voxel_data.npy', data)
 
@@ -738,8 +774,35 @@ def get_voxel_test(test_pdb, k, voxel_size):
             list_prot_vox.append(prot_vox)
     else:
         print("BAD number of residues do not correspond dont know why")
+        quit()
     return(list_prot_vox)
+def visualize_predict(input_pdb, structure, value_predict):#, value_true):
+    """
+    visualize with pymol the prediction
+    """
+    input_pymol = open("pymol_tmp.pml", "w")
+    input_pymol.write("load "+input_pdb+"\n")
+    input_pymol.write("set dash_gap, 0\n")
+    input_pymol.write("set dash_width, 2\n")
+    input_pymol.write("preset.pretty(selection='all')\n")
+    
 
+    k = 0
+    resseqs = [residue.id[1] for residue in structure.get_residues()]
+    for i in resseqs:
+        if value_predict[k] == 1:
+            input_pymol.write("color red, resi {}\n".format(i))
+        else:
+            input_pymol.write("color blue, resi {}\n".format(i))
+        """
+        if value_true[k] == 1:
+            input_pymol.write("color white, resi {}\n".format(i))    
+        if value_predict[k] == 1 and value_predict[k] == value_true[k]:
+            input_pymol.write("color green, resi {}\n".format(i))
+        """
+        k += 1
+    input_pymol.close()
+    os.system("pymol -p pymol_tmp.pml")
 #### MAIN ####
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -799,7 +862,15 @@ if __name__ == "__main__":
     parser.add_argument("-model_name", nargs="?",\
         help="chose the model name",\
         default="final_model.h5")
-        
+    parser.add_argument("-pdb", nargs="?",\
+        help="chose the model name",\
+        default="../data/test_file/9rsa0A0B_2.pdb")
+    parser.add_argument("-rsa", nargs="?",\
+        help="chose the model name",\
+        default="../data/test_file/9rsa0A0B_2.rsa")
+    parser.add_argument("-pssm", nargs="?",\
+        help="chose the model name",\
+        default="../data/test_file/9rsa0A0B_2.pssm")
     args = parser.parse_args()
     
     
@@ -874,12 +945,13 @@ if __name__ == "__main__":
                                         voxel_size,\
                                         voxel_size])
         X[1] = np.asarray(X[1])
+
         
         X_train = [X[0][:int(len(X[0])*2/3)], X[1][:int(len(X[0])*2/3)]]
         X_test = [X[0][int(len(X[0])*2/3):], X[1][int(len(X[0])*2/3):]]
         Y_train = Y[:int(len(Y)*2/3)]
         Y_test = Y[int(len(Y)*2/3):]
-        
+
         model = train_DeepNN_model(X_train, Y_train)
         ACC, TPR, TNR, FPR, FNR, conf_mat = evaluate_model(X_test,\
                                                            Y_test,\
@@ -923,15 +995,21 @@ if __name__ == "__main__":
                      " FNR: "+str(FNR_train)+"\n")
         myfile.write(str(conf_mat_train))
         myfile.write("\n")
+        myfile.write("ROC curve AUC\n")
+        myfile.write(str(auc))
         myfile.close()
         #
-    test_pdb = "../data/test_file/12as0A0B_1.pdb"
-    test_rsa = "../data/test_file/12as0A0B_1.rsa"
-    test_pssm = "../data/test_file/12as0A0B_1.fasta.pssm"
+    test_pdb = args.pdb#"../data/test_file/9rsa0A0B_2.pdb"
+    test_rsa = args.rsa#"../data/test_file/9rsa0A0B_2.rsa"
+    #test_rsa_bind = "../data/test_file/9rsa0A0B.rsa"
+    test_pssm = args.pssm#"../data/test_file/9rsa0A0B_2.pssm"
     if args.test:
         list_prot_vox = get_voxel_test(test_pdb, args.voxel, voxel_size)
         list_prot_vox = asarray(list_prot_vox)
-        save('../data/test_file/voxel_test.npy', list_prot_vox)
+        #save('../data/test_file/voxel_test.npy', list_prot_vox)
+        X_voxel = list_prot_vox
+        X_voxel = load('../data/test_file/voxel_test.npy')
+        parser = PDBParser()
         structure = parser.get_structure('test', test_pdb)
         list_dssp_features = get_SS(structure, test_pdb)
         list_vector = get_vector(structure,\
@@ -943,17 +1021,43 @@ if __name__ == "__main__":
 
         list_vector_neighbors = get_vector_neighbors(structure, list_vector)
         model = DeepNN_model_build.build()
+        #model.load_weights("final_model_best.h5")
         model.load_weights("final_model.h5")
-        X = [list_vector_neighbors,list_prot_vox]
+        X = [list_vector_neighbors, X_voxel]
         nchannels = X[1].shape[2]
         X[1] = X[1].transpose().reshape([len(X[1]), nchannels, voxel_size,\
          voxel_size, voxel_size])
         X[1] = np.asarray(X[1])
-        print(len(X[0]))
-        print(len(X[1]))
-        print("yep")
-    
+        Y_pred = model.predict(X)
+        #compare with true values
+        list_value_rsa = get_rsa_relative(test_rsa)
+            
+        #list_relative_rsa_bind_1, list_relative_rsa_bind_2 =\
+                                    #get_rsa_relative_bind(test_rsa_bind)
+        #list_interface_residue = get_interface_residue(list_value_rsa)#,\
+                                                     #list_relative_rsa_bind_2)
+        
+        Y_true = []
+        Y_predi = []
+        for i in range(len(get_sequence(structure))):
+            """
+            if i in list_interface_residue:
+                Y_true.append(1)
+            else:
+                Y_true.append(0)
+            """
+            if Y_pred[i][1] > 0.5:
+                Y_predi.append(1)
+            else:
+                Y_predi.append(0)
+        #TN, FP, FN, TP = confusion_matrix(Y_true, Y_predi).ravel()
+        #conf_mat = confusion_matrix(Y_true, Y_predi, labels = [0,1])
+        
+        visualize_predict(test_pdb, structure, Y_predi)#, Y_true)
 
+        myfile = open("test_result.txt", 'w')
+        myfile.write(str(Y_pred))
+        myfile.close()
 
 
 
